@@ -1,0 +1,24 @@
+#!/bin/bash
+source ../settings/scripts/_common.sh
+
+ynh_script_progression --message="Fetching the application source..." --weight=2
+ynh_setup_source --dest_dir="$src_dir"
+
+ynh_script_progression --message="Creating the Python environment..." --weight=10
+finance_install_python
+
+ynh_script_progression --message="Creating the encryption key..." --weight=2
+finance_ensure_key
+
+ynh_script_progression --message="Writing the configuration..." --weight=2
+finance_write_env
+
+ynh_script_progression --message="Registering the systemd service and nginx..." --weight=3
+ynh_config_add_systemd
+ynh_config_add_nginx
+
+ynh_script_progression --message="Starting the service..." --weight=2
+ynh_systemctl --service="$app" --action=start --log_path=systemd
+ynh_systemctl --service="$app" --action=enable
+
+ynh_script_progression --message="Finance is installed." --last

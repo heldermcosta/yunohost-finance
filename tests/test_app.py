@@ -6,8 +6,8 @@ the database, and access rules.
 
 from __future__ import annotations
 
+import base64
 import os
-from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -49,7 +49,9 @@ def client(settings):
 
 
 def as_user(name: str) -> dict:
-    return {"Auth-User": name}
+    # What SSOwat sends: Basic auth with the username and the password "-".
+    token = base64.b64encode(f"{name}:-".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
 
 
 def upload(client, user, account_id, pdf: bytes, name="EXTRATO COMBINADO 2026005.pdf"):

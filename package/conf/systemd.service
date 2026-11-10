@@ -1,0 +1,17 @@
+[Unit]
+Description=Finance app (__APP__)
+After=network.target postgresql.service
+
+[Service]
+User=__APP__
+Group=__APP__
+WorkingDirectory=__INSTALL_DIR__/src
+EnvironmentFile=__INSTALL_DIR__/app.env
+ExecStart=__INSTALL_DIR__/venv/bin/uvicorn app.main:create_app --factory --host 127.0.0.1 --port __PORT__ --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

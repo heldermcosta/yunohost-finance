@@ -11,8 +11,33 @@ once they are imported.
   real statement folder, see docs/parser-validation.md).
 - App skeleton: database models, encrypted PDF storage, import pipeline with a review queue,
   access rules, monthly summary, CSV export.
-- Not yet done: YunoHost package (manifest, install/upgrade/backup/restore scripts), web
-  front end, the other institutions' parsers, the full category rule set.
+- YunoHost package drafted in `package/` (manifest, install, upgrade, remove, backup,
+  restore, systemd and nginx templates). Not yet tested on a YunoHost server.
+- Not yet done: web front end, the other institutions' parsers, the full category rule set.
+
+## YunoHost package
+
+Packaging v2, helpers v2.1, targeting YunoHost 12.x with PostgreSQL. The package fetches
+the source from a tagged GitHub archive, runs the app from a virtualenv under the install
+directory, and serves it through nginx behind SSOwat.
+
+Before it can be installed:
+1. Publish tag `v0.1.0` and fill in the archive's sha256 in `package/manifest.toml`.
+2. Choose the licence (`[upstream] license`).
+3. Test on a YunoHost test server (install, upgrade, backup, restore, remove).
+
+Items marked `VERIFY` in `package/scripts/backup` and `package/scripts/restore` depend on
+YunoHost behaviour that was not confirmed in the documentation:
+- that the postgresql resource backs up and restores the database automatically;
+- the exact usage of `ynh_backup` and `ynh_restore` with a directory argument;
+- `ynh_die` and `ynh_script_progression --last`.
+
+Encryption key: created at `/etc/<app>/secret.key` on install, excluded from backups. On a
+restore to a new server, the key from the original server must be copied there first; the
+restore script stops with a message if it is missing.
+
+SSO: SSOwat sends the username in `Authorization: Basic …` when the permission has
+`auth_header = true`. The app reads only the username. Never expose its port directly.
 
 ## Run locally (development)
 

@@ -1,0 +1,9 @@
+#!/bin/bash
+source ../settings/scripts/_common.sh
+
+ynh_script_progression --message="Backing up the encrypted statement PDFs..." --weight=5
+# VERIFY on a test server: the database is expected to be backed up by the postgresql resource.
+# The encryption key is intentionally NOT included, so a stolen backup cannot be decrypted.
+ynh_backup "$data_dir/pdfs"
+
+ynh_script_progression --message="Backup complete. Keep a separate copy of $key_file." --last

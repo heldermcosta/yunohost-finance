@@ -17,6 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto
+from .auth import username_from_authorization
 from .config import Settings
 from .ingest import DuplicateStatement, WrongInstitution, import_pdf, read_pdf
 from .models import Account, AccountShare, Base, Statement, Transaction, User
@@ -61,7 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session.close()
 
     def get_current_user(request: Request, session: Session = Depends(get_session)) -> User:
-        username = request.headers.get("Auth-User") or settings.dev_user
+        username = username_from_authorization(request.headers.get("Authorization")) or settings.dev_user
         if not username:
             raise HTTPException(status_code=401, detail="not signed in")
         return access.get_or_create_user(session, username)

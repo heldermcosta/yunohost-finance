@@ -1,0 +1,26 @@
+#!/bin/bash
+source ../settings/scripts/_common.sh
+
+ynh_script_progression --message="Checking the encryption key..." --weight=1
+if [ ! -f "$key_file" ]; then
+    ynh_die --message="Restore stopped: copy the encryption key from the original server to $key_file (owner root, group $app, mode 0440) and run the restore again."
+fi
+
+ynh_script_progression --message="Restoring the encrypted statement PDFs..." --weight=5
+ynh_restore "$data_dir/pdfs"
+
+ynh_script_progression --message="Fetching the application source..." --weight=2
+ynh_setup_source --dest_dir="$src_dir"
+
+ynh_script_progression --message="Recreating the Python environment..." --weight=8
+finance_install_python
+
+ynh_script_progression --message="Writing the configuration..." --weight=2
+finance_write_env
+ynh_config_add_systemd
+ynh_config_add_nginx
+
+ynh_script_progression --message="Starting the service..." --weight=2
+ynh_systemctl --service="$app" --action=start --log_path=systemd
+
+ynh_script_progression --message="Restore complete." --last

@@ -1,0 +1,61 @@
+packaging_format = 2
+
+id = "finance"
+name = "Finance"
+description.en = "Self-hosted personal finance: statement import, reconciliation and analytics"
+version = "0.1.0~ynh1"
+maintainers = ["heldermcosta"]
+
+[upstream]
+# TODO: choose the licence before publishing (SPDX identifier).
+license = "LicenseRef-proprietary"
+code = "https://github.com/heldermcosta/yunohost-finance"
+
+[integration]
+yunohost = ">= 12.0"
+helpers_version = "2.1"
+architectures = "all"
+multi_instance = false
+ldap = "not_relevant"
+sso = "not_relevant"   # login is handled by SSOwat in front of the app (permission auth_header)
+disk = "300M"
+ram.build = "300M"
+ram.runtime = "200M"
+
+[install]
+    [install.domain]
+    type = "domain"
+
+    [install.path]
+    type = "path"
+    default = "/finance"
+
+    [install.init_main_permission]
+    # Household members: every logged-in YunoHost user. Narrow this if needed.
+    type = "group"
+    default = "all_users"
+
+[resources]
+    [resources.sources.main]
+    # TODO: publish tag v0.1.0 on GitHub, then fill in the sha256 of its archive.
+    url = "https://github.com/heldermcosta/yunohost-finance/archive/refs/tags/v0.1.0.tar.gz"
+    sha256 = "TODO"
+
+    [resources.system_user]
+
+    [resources.install_dir]
+
+    [resources.data_dir]
+
+    [resources.permissions]
+    main.url = "/"
+    main.auth_header = true
+
+    [resources.ports]
+    main.default = 8800
+
+    [resources.database]
+    type = "postgresql"
+
+    [resources.apt]
+    packages = "poppler-utils, python3-venv, python3-dev"

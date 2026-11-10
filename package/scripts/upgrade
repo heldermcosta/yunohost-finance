@@ -1,0 +1,24 @@
+#!/bin/bash
+source ../settings/scripts/_common.sh
+
+ynh_script_progression --message="Stopping the service..." --weight=2
+ynh_systemctl --service="$app" --action=stop
+
+ynh_script_progression --message="Updating the application source..." --weight=3
+ynh_setup_source --dest_dir="$src_dir"
+
+ynh_script_progression --message="Updating the Python environment..." --weight=8
+finance_install_python
+
+ynh_script_progression --message="Checking the encryption key..." --weight=1
+finance_ensure_key
+
+ynh_script_progression --message="Updating the configuration..." --weight=2
+finance_write_env
+ynh_config_add_systemd
+ynh_config_add_nginx
+
+ynh_script_progression --message="Starting the service..." --weight=2
+ynh_systemctl --service="$app" --action=start --log_path=systemd
+
+ynh_script_progression --message="Upgrade complete." --last
