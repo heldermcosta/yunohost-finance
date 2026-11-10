@@ -3,6 +3,17 @@
 # App settings (install_dir, data_dir, port, db_name, db_user, db_pwd, ...) are loaded by YunoHost.
 
 app=${YNH_APP_INSTANCE_NAME:-finance}
+
+# Resource values are saved as app settings during provisioning, so read them here.
+# This works in every script, including install, where the settings directory does not exist yet.
+_finance_setting() { ynh_app_setting_get --app="$app" --key="$1"; }
+install_dir=${install_dir:-$(_finance_setting install_dir)}
+data_dir=${data_dir:-$(_finance_setting data_dir)}
+port=${port:-$(_finance_setting port)}
+db_name=${db_name:-$(_finance_setting db_name)}
+db_user=${db_user:-$(_finance_setting db_user)}
+db_pwd=${db_pwd:-$(_finance_setting db_pwd)}
+
 src_dir="$install_dir/src"
 venv_dir="$install_dir/venv"
 env_file="$install_dir/app.env"

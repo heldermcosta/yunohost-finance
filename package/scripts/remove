@@ -1,5 +1,7 @@
 #!/bin/bash
-source ../settings/scripts/_common.sh
+source /usr/share/yunohost/helpers
+ynh_abort_if_errors
+source ./_common.sh
 
 ynh_script_progression --message="Stopping the service..." --weight=2
 ynh_systemctl --service="$app" --action=stop
