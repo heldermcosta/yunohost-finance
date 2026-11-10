@@ -37,9 +37,9 @@ ram.runtime = "200M"
 
 [resources]
     [resources.sources.main]
-    # TODO: publish tag v0.1.0 on GitHub, then fill in the sha256 of its archive.
+    # GitHub release archive for tag v0.1.0 (repository is public).
     url = "https://github.com/heldermcosta/yunohost-finance/archive/refs/tags/v0.1.0.tar.gz"
-    sha256 = "TODO"
+    sha256 = "3a905d79271c157b111ae6601feeca7f7a8aa161c0d43123fe736f964466b995"
 
     [resources.system_user]
 
