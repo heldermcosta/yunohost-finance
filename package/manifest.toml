@@ -7,8 +7,7 @@ version = "0.3.1~ynh1"
 maintainers = ["heldermcosta"]
 
 [upstream]
-# TODO: choose the licence before publishing (SPDX identifier).
-license = "LicenseRef-proprietary"
+license = "AGPL-3.0-or-later"
 code = "https://github.com/heldermcosta/yunohost-finance"
 
 [integration]

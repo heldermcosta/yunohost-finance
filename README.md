@@ -89,3 +89,7 @@ Requires `pdftotext` (poppler-utils) on the PATH.
 - **Review rules.** A statement with a failed total is never accepted automatically. A
   statement whose totals agree but whose running balances do not chain goes to review as a
   warning.
+
+## Licence
+
+AGPL-3.0-or-later. See [LICENSE](LICENSE). If you run a modified version for other people over a network, you must offer them its source.
