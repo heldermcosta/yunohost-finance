@@ -1527,7 +1527,7 @@ function renderCategorise() {
   const categoryList = el("datalist", { id: "cg-categories" }, cache.categories.map(c => el("option", { value: c })));
 
   const detailRow = (g) => el("tr", {}, el("td", { colspan: 7 }, el("table", {}, [
-    el("thead", {}, el("tr", {}, [t("cg_in_group"), t("cg_date"), t("cg_description"), t("cg_amount")].map(h => el("th", { text: h })))),
+    el("thead", {}, el("tr", {}, [t("cg_in_group"), t("cg_date"), L("Bank", "Banco"), t("cg_description"), t("cg_amount")].map(h => el("th", { text: h })))),
     el("tbody", {}, g.items.map(i => el("tr", {}, [
       el("td", {}, el("input", { type: "checkbox", checked: !(cgExcluded.get(g.key) || new Set()).has(i.id),
         on: { change: e => {
@@ -1537,6 +1537,7 @@ function renderCategorise() {
           renderCategorise();
         } } })),
       el("td", { text: i.booked_on }),
+      el("td", { text: i.account || "–" }),
       el("td", { class: "desc", text: i.description }),
       el("td", { text: i.amount }),
     ]))),

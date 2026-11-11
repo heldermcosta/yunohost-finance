@@ -498,6 +498,15 @@ def test_renaming_a_parent_renames_its_subcategories(client, text_by_pdf):
     assert any(t["category"] == f"Food{SEPARATOR}Supermarket" for t in rows)
 
 
+def test_uncategorised_group_items_name_the_bank_account(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 groups-account"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    groups = client.get("/api/uncategorised/groups", headers=as_user("helder")).json()["groups"]
+    assert groups and all(item["account"] for g in groups for item in g["items"])
+
+
 def test_insights_period_is_the_sum_of_its_months(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 insights-period"

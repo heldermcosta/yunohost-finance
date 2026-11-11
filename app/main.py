@@ -647,6 +647,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rows = (accepted_query(session, user)
                 .filter(Transaction.category == UNCATEGORISED, Transaction.is_transfer.is_(False))
                 .order_by(Transaction.booked_on.desc(), Transaction.id.desc()).all())
+        labels = account_labels(session, user)
         groups: dict[str, dict] = {}
         for t in rows:
             key = _description_key(t.description, _ignored_terms(user)) or t.description.strip().upper()[:30]
@@ -655,7 +656,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             g["count"] += 1
             g["total"] += t.amount
             g["ids"].append(t.id)
-            g["items"].append({"id": t.id, "booked_on": t.booked_on.isoformat(),
+            g["items"].append({"id": t.id, "booked_on": t.booked_on.isoformat(), "account": labels.get(t.account_id, ""),
                                "description": t.description, "amount": str(t.amount)})
             if len(g["examples"]) < 3 and t.description not in g["examples"]:
                 g["examples"].append(t.description)
