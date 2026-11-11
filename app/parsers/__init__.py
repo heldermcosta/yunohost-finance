@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .activobank import ActivoBankParser
 from .bankinter import BankinterParser
+from .invest import InvestParser
 from .base import StatementParser
 from .cards_legacy import CARD_PARSERS
 
@@ -13,12 +14,13 @@ from .cards_legacy import CARD_PARSERS
 PARSERS: list[StatementParser] = [
     ActivoBankParser(),
     BankinterParser(),
+    InvestParser(),
     *CARD_PARSERS,
 ]
 
 
 INSTITUTION_NAMES = {
-    "activobank": "ActivoBank", "bankinter": "Bankinter", "affinity": "Affinity",
+    "activobank": "ActivoBank", "bankinter": "Bankinter", "invest": "Invest", "affinity": "Affinity",
     "wizink": "WiZink", "cofidis": "Cofidis", "universo": "Universo", "cetelem": "Cetelem",
 }
 

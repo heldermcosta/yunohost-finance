@@ -118,6 +118,20 @@ class Rule(Base):
     object_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
 
+class PortfolioSnapshot(Base):
+    """Totals of an investment report at its date: what is held, not spending."""
+
+    __tablename__ = "portfolio_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    statement_id: Mapped[int] = mapped_column(ForeignKey("statements.id", ondelete="CASCADE"), unique=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    period_end: Mapped[date] = mapped_column(Date)
+    total_assets: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    cash: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    term_deposits: Mapped[str] = mapped_column(Text, default="[]")  # JSON list
+
+
 class Budget(Base):
     __tablename__ = "budgets"
     __table_args__ = (UniqueConstraint("owner_id", "category"),)

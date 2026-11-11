@@ -13,6 +13,7 @@ Rules:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import tempfile
@@ -23,7 +24,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .categories import categorize, is_card_payment, rule_object
-from .models import Account, Statement, Transaction
+from .models import Account, PortfolioSnapshot, Statement, Transaction
 from .parsers import INSTITUTION_NAMES, find_parser
 from .parsers.base import reconcile
 from .parsers.pdftext import PdfPasswordError, extract_layout_text
@@ -188,6 +189,13 @@ def import_pdf(
     )
     session.add(statement)
     session.flush()
+    if parsed.snapshot is not None and parsed.snapshot.get("total_assets") is not None:
+        session.add(PortfolioSnapshot(
+            statement_id=statement.id, account_id=account.id, period_end=parsed.period_end,
+            total_assets=Decimal(parsed.snapshot["total_assets"]),
+            cash=Decimal(parsed.snapshot["cash"] or "0"),
+            term_deposits=json.dumps(parsed.snapshot.get("term_deposits") or []),
+        ))
 
     for t in parsed.transactions:
         category, source = categorize(t.description, t.amount, user_rules)

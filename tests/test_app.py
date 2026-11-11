@@ -636,3 +636,69 @@ def test_rule_object_is_taken_from_the_first_matching_rule():
     assert rule_object("PAG SERV DEGIRO", rules) == "Portfolio"
     assert rule_object("LIDL SETUBAL", rules) is None
     assert rule_object("CONTINENTE", rules) is None
+
+
+# --- Banco Invest reports ---------------------------------------------------
+
+from decimal import Decimal as _D  # noqa: E402
+
+
+from app.parsers import find_parser
+from app.parsers.base import reconcile
+
+REPORT = "\n".join([
+    "Exmo. Sr.",
+    "Banco Invest, SA - Capital Social €47.500.000 - Av. Eng. Duarte Pacheco, Lisboa",
+    "Posição Integrada - 31 de Janeiro de 2016",
+    "Cliente:      754952",
+    "Depósitos à Ordem                                  Saldo Anterior:     50,81",
+    "  Conta 754952-10-1            EUR",
+    "Data                  Data                  Descrição                  Débito      Crédito     Saldo",
+    "2016-01-05            2016-01-05            Subscrição Fundo: ARPPR    50,00       0,00        0,81",
+    "2016-01-26            2016-01-26            Transferência de 0754952-10-002   0,00   50,00   50,81",
+    "  Saldo em      2016-01-31      :      50,81",
+    "Aplicações a Prazo",
+    "Invest + 180 dias    2015-12-07    2016-06-04    1,50    4.035,00    EUR",
+    "Total de Activos:                58.244,73",
+])
+
+
+def test_invest_movements_reconcile_and_snapshot_is_kept():
+    parser = find_parser(REPORT)
+    assert parser.institution == "invest"
+    st = parser.parse(REPORT)
+    assert st.account_ref == "754952"
+    assert st.period_end.isoformat() == "2016-01-31"
+    assert [t.amount for t in st.transactions] == [_D("-50.00"), _D("50.00")]
+    assert reconcile(st).status == "ok"
+    assert st.snapshot["total_assets"] == "58244.73"
+    assert st.snapshot["cash"] == "50.81"
+    assert st.snapshot["term_deposits"] == [{
+        "description": "Invest + 180 dias", "start": "2015-12-07", "end": "2016-06-04",
+        "rate": "1,50", "amount": "4035.00", "currency": "EUR",
+    }]
+
+
+def test_investment_report_is_listed_and_its_snapshot_removed_with_it(client, text_by_pdf):
+    created = client.post("/api/accounts", headers={"Authorization": "Basic aGVsZGVyOi0="},
+                          json={"institution": "invest", "label": "Invest Helder", "account_ref_last4": "4952"})
+    assert created.status_code == 201, created.text
+    account_id = created.json()["id"]
+    pdf = b"%PDF-1.4 invest"
+    text_by_pdf[pdf] = REPORT
+    up = client.post("/api/statements", headers={"Authorization": "Basic aGVsZGVyOi0="},
+                     data={"account_id": str(account_id)},
+                     files={"file": ("invest.pdf", pdf, "application/pdf")})
+    assert up.status_code == 201, up.text
+    statement_id = up.json()["statement_id"]
+
+    listed = client.get("/api/investments", headers={"Authorization": "Basic aGVsZGVyOi0="}).json()
+    assert listed == [{"account": "Invest Helder", "period_end": "2016-01-31", "total_assets": "58244.73",
+                       "cash": "50.81",
+                       "term_deposits": [{"description": "Invest + 180 dias", "start": "2015-12-07",
+                                          "end": "2016-06-04", "rate": "1,50", "amount": "4035.00",
+                                          "currency": "EUR"}]}]
+
+    assert client.delete(f"/api/statements/{statement_id}",
+                         headers={"Authorization": "Basic aGVsZGVyOi0="}).status_code == 200
+    assert client.get("/api/investments", headers={"Authorization": "Basic aGVsZGVyOi0="}).json() == []
