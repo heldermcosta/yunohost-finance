@@ -363,7 +363,7 @@ en: {
   budget_none:"No budgets yet. Add one below.", budget_spent:"{spent} of {limit}", budget_over:"over", budget_near:"near",
   delete_category_confirm:"Delete category \"{name}\"? Its transactions become Uncategorised and its rules and budgets are removed.",
   delete_account_confirm:"Delete this account? Only possible when it has no statements.", delete_rule_confirm:"Delete this rule?",
-  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
+  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", st_filter_account:"All accounts", st_filter_status:"All statuses", st_filter_search:"Search file name", st_select_all:"Select all shown", st_delete_selected:"Delete selected ({n})", st_bulk_confirm:"Delete {n} statement(s), their PDFs and all their transactions?", st_bulk_done:"Deleted {n}. Skipped {s} you do not own.", st_none_match:"No statements match these filters.", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
   scope_saved:"Saved", detect_done:"{n} transfer pairs found", not_signed_in:"Not signed in",
   err_too_large:"The file is larger than 20 MB.", err_not_pdf:"This is not a PDF file.", err_no_parser:"No parser recognises this statement yet.",
   err_wrong_institution:"This statement is from another bank than the account.", err_wrong_account:"This statement belongs to another account.",
@@ -404,7 +404,7 @@ pt: {
   budget_none:"Ainda não há orçamentos. Adicione um abaixo.", budget_spent:"{spent} de {limit}", budget_over:"excedido", budget_near:"perto",
   delete_category_confirm:"Apagar a categoria \"{name}\"? Os movimentos ficam sem categoria e as regras e orçamentos são removidos.",
   delete_account_confirm:"Apagar esta conta? Só é possível sem extratos.", delete_rule_confirm:"Apagar esta regra?",
-  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
+  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", st_filter_account:"Todas as contas", st_filter_status:"Todos os estados", st_filter_search:"Pesquisar nome do ficheiro", st_select_all:"Selecionar os visíveis", st_delete_selected:"Apagar selecionados ({n})", st_bulk_confirm:"Apagar {n} extrato(s), os seus PDFs e todos os movimentos?", st_bulk_done:"Apagados {n}. Ignorados {s} que não são seus.", st_none_match:"Nenhum extrato corresponde a estes filtros.", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
   scope_saved:"Guardado", detect_done:"{n} pares de transferências encontrados", not_signed_in:"Sessão não iniciada",
   err_too_large:"O ficheiro tem mais de 20 MB.", err_not_pdf:"Não é um ficheiro PDF.", err_no_parser:"Ainda não há leitor para este extrato.",
   err_wrong_institution:"Este extrato é de outro banco que não o da conta.", err_wrong_account:"Este extrato pertence a outra conta.",
@@ -1108,24 +1108,79 @@ $("cat-add").addEventListener("click", async () => {
 });
 
 /* ---------- accounts ---------- */
-async function loadStatements() {
-  const rows = await api("statements");
-  if (!rows.length) { $("st-table").replaceChildren(el("p", { class: "muted", text: t("statements_none") })); return; }
-  $("st-table").replaceChildren(el("table", {}, [
-    el("thead", {}, el("tr", {}, [t("st_account"), t("st_file"), t("st_period"), t("st_status"), t("st_count"), ""].map(h => el("th", { text: h })))),
-    el("tbody", {}, rows.map(s => el("tr", {}, [
-      el("td", { text: s.account }),
-      el("td", { class: "desc", text: s.original_name }),
-      el("td", { text: s.period.join(" → ") }),
-      el("td", {}, el("span", { class: "pill " + s.reconciliation, text: s.status + " · " + s.reconciliation })),
-      el("td", { text: String(s.transactions) }),
-      el("td", {}, s.can_delete ? el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
-        if (!(await confirmBox(t("delete_statement_confirm")))) return;
-        try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.accounts(); }
-        catch (e) { toast("error", errorText(e)); }
-      } } }) : ""),
-    ]))),
+let statementRows = [];
+const statementSelection = new Set();
+let statementBulkButton = null;
+
+function shownStatements() {
+  const account = $("st-filter-account").value;
+  const status = $("st-filter-status").value;
+  const query = $("st-filter-search").value.trim().toLowerCase();
+  return statementRows.filter(s =>
+    (!account || s.account === account) &&
+    (!status || s.status === status) &&
+    (!query || s.original_name.toLowerCase().includes(query)));
+}
+
+function renderStatementTable() {
+  const shown = shownStatements();
+  const deletable = shown.filter(s => s.can_delete);
+  for (const id of [...statementSelection]) if (!statementRows.some(s => s.id === id && s.can_delete)) statementSelection.delete(id);
+
+  statementBulkButton.textContent = t("st_delete_selected", { n: statementSelection.size });
+  statementBulkButton.disabled = statementSelection.size === 0;
+
+  const selectAll = el("input", { type: "checkbox", checked: deletable.length > 0 && deletable.every(s => statementSelection.has(s.id)),
+    on: { change: e => { deletable.forEach(s => e.target.checked ? statementSelection.add(s.id) : statementSelection.delete(s.id)); renderStatementTable(); } } });
+  const rowsHtml = shown.length ? shown.map(s => el("tr", {}, [
+    el("td", {}, s.can_delete ? el("input", { type: "checkbox", checked: statementSelection.has(s.id),
+      on: { change: e => { e.target.checked ? statementSelection.add(s.id) : statementSelection.delete(s.id); renderStatementTable(); } } }) : ""),
+    el("td", { text: s.account }),
+    el("td", { class: "desc", text: s.original_name }),
+    el("td", { text: s.period.join(" → ") }),
+    el("td", {}, el("span", { class: "pill " + s.reconciliation, text: s.status + " · " + s.reconciliation })),
+    el("td", { text: String(s.transactions) }),
+    el("td", {}, s.can_delete ? el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+      if (!(await confirmBox(t("delete_statement_confirm")))) return;
+      try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.accounts(); }
+      catch (e) { toast("error", errorText(e)); }
+    } } }) : ""),
+  ])) : [el("tr", {}, el("td", { colspan: 7, class: "muted", text: t("st_none_match") }))];
+
+  $("st-list").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [el("th", {}, selectAll), ...[t("st_account"), t("st_file"), t("st_period"), t("st_status"), t("st_count"), ""].map(h => el("th", { text: h }))])),
+    el("tbody", {}, rowsHtml),
   ]));
+}
+
+async function loadStatements() {
+  statementRows = await api("statements");
+  if (!statementRows.length) { $("st-table").replaceChildren(el("p", { class: "muted", text: t("statements_none") })); return; }
+  const keepAccount = $("st-filter-account")?.value || "";
+  const keepStatus = $("st-filter-status")?.value || "";
+  const keepSearch = $("st-filter-search")?.value || "";
+  const accountNames = [...new Set(statementRows.map(s => s.account))].sort();
+  statementBulkButton = el("button", { class: "small danger", text: t("st_delete_selected", { n: 0 }), disabled: true,
+    on: { click: async () => {
+      const ids = [...statementSelection];
+      if (!(await confirmBox(t("st_bulk_confirm", { n: ids.length })))) return;
+      try {
+        const r = await api("statements/bulk-delete", { method: "POST", json: { ids } });
+        statementSelection.clear();
+        toast("success", t("st_bulk_done", { n: r.deleted.length, s: r.skipped.length }));
+        LOADERS.accounts();
+      } catch (e) { toast("error", errorText(e)); }
+    } } });
+  const bar = el("div", { class: "row-actions" }, [
+    el("select", { id: "st-filter-account", on: { change: renderStatementTable } },
+      [el("option", { value: "", text: t("st_filter_account") }), ...accountNames.map(n => el("option", { value: n, text: n, selected: n === keepAccount }))]),
+    el("select", { id: "st-filter-status", on: { change: renderStatementTable } },
+      [el("option", { value: "", text: t("st_filter_status") }), ...["accepted", "review"].map(v => el("option", { value: v, text: v, selected: v === keepStatus }))]),
+    el("input", { id: "st-filter-search", type: "search", placeholder: t("st_filter_search"), value: keepSearch, on: { input: renderStatementTable } }),
+    statementBulkButton,
+  ]);
+  $("st-table").replaceChildren(bar, el("div", { id: "st-list" }));
+  renderStatementTable();
 }
 
 LOADERS.accounts = async () => {

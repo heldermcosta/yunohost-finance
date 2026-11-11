@@ -519,3 +519,28 @@ def test_insights_for_a_month(client, text_by_pdf):
 def test_insights_empty_database(client):
     make_account(client, "helder")
     assert client.get("/api/insights", headers=as_user("helder")).json() == {"month": None}
+
+
+def test_bulk_delete_removes_owned_statements_and_skips_the_rest(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    assert client.post(f"/api/accounts/{account_id}/shares", headers=as_user("helder"),
+                       json={"username": "anna"}).status_code == 201
+    ids = []
+    for name in (b"%PDF-1.4 bulk-a", b"%PDF-1.4 bulk-b"):
+        text_by_pdf[name] = basic_statement()
+        ids.append(upload(client, "helder", account_id, name).json()["statement_id"])
+    # Anna can see the shared account but cannot delete its statements.
+    r = client.post("/api/statements/bulk-delete", headers=as_user("anna"), json={"ids": ids})
+    assert r.status_code == 200
+    assert r.json() == {"deleted": [], "skipped": ids}
+    assert len(client.get("/api/statements", headers=as_user("helder")).json()) == 2
+
+    r = client.post("/api/statements/bulk-delete", headers=as_user("helder"), json={"ids": ids + [999999]})
+    assert r.json() == {"deleted": ids, "skipped": [999999]}
+    assert client.get("/api/statements", headers=as_user("helder")).json() == []
+    assert client.get("/api/transactions", headers=as_user("helder")).json()["total"] == 0
+
+
+def test_bulk_delete_rejects_a_malformed_body(client):
+    r = client.post("/api/statements/bulk-delete", headers=as_user("helder"), json={"ids": "1"})
+    assert r.status_code == 422

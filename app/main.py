@@ -116,6 +116,18 @@ def _description_key(description: str) -> str:
     return " ".join(words[:2])
 
 
+def _delete_statement(session: Session, statement: Statement, pdf_dir: Path) -> None:
+    """Remove a statement, its transactions and its PDF. Transfer links are unlinked first."""
+    pdf_path = pdf_dir / statement.pdf_file
+    for t in session.query(Transaction).filter_by(statement_id=statement.id).all():
+        if t.is_transfer:
+            unlink(t, session)
+        session.delete(t)
+    session.delete(statement)
+    session.commit()
+    pdf_path.unlink(missing_ok=True)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -413,15 +425,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         account = account_for_read(session, user, statement.account_id)
         if not access.is_owner(user, account):
             raise HTTPException(status_code=403, detail="only the owner can delete a statement")
-        pdf_path = settings.pdf_dir / statement.pdf_file
-        for t in session.query(Transaction).filter_by(statement_id=statement.id).all():
-            if t.is_transfer:
-                unlink(t, session)
-            session.delete(t)
-        session.delete(statement)
-        session.commit()
-        pdf_path.unlink(missing_ok=True)
+        _delete_statement(session, statement, settings.pdf_dir)
         return {"deleted": statement_id}
+
+    @app.post("/api/statements/bulk-delete")
+    def bulk_delete_statements(body: dict, user: User = Depends(get_current_user),
+                               session: Session = Depends(get_session)) -> dict:
+        """Delete several statements. Statements the user does not own are skipped, not failed."""
+        ids = body.get("ids")
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            raise HTTPException(status_code=422, detail="ids must be a list of statement ids")
+        deleted, skipped = [], []
+        for statement_id in dict.fromkeys(ids):
+            statement = session.get(Statement, statement_id)
+            if statement is None:
+                skipped.append(statement_id)
+                continue
+            account = account_for_read(session, user, statement.account_id)
+            if not access.is_owner(user, account):
+                skipped.append(statement_id)
+                continue
+            _delete_statement(session, statement, settings.pdf_dir)
+            deleted.append(statement_id)
+        return {"deleted": deleted, "skipped": skipped}
 
     @app.get("/api/statements/{statement_id}/pdf")
     def statement_pdf(statement_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> Response:
