@@ -78,6 +78,12 @@ class RuleIn(BaseModel):
     apply: bool = True
 
 
+class BulkByTextIn(BaseModel):
+    text: str = Field(min_length=2, max_length=120)
+    category: str = Field(min_length=1, max_length=60)
+    save_rule: bool = False
+
+
 class CategoryIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
 
@@ -314,7 +320,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 message = f"Several {exc.institution} accounts match. Choose one."
             else:
                 message = f"No {exc.institution} account matches this statement. Create one first."
-            raise _err(422, "account_needed", message, accounts=options)
+            raise _err(422, "account_needed", message, accounts=options, suggested=exc.suggested)
         except PasswordRequired:
             raise _err(422, "password_required", "This PDF is password protected.")
 
@@ -465,6 +471,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rule_id = None
         if body.save_rule:
             rule_id = _upsert_rule(session, user, body.save_rule, body.category)
+        session.commit()
+        return {"updated": updated, "rule_id": rule_id}
+
+    @app.post("/api/transactions/bulk-category-by-text")
+    def bulk_category_by_text(body: BulkByTextIn, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        text = body.text.strip()
+        rows = accepted_query(session, user).filter(func.upper(Transaction.description).contains(text.upper())).all()
+        updated = 0
+        for t in rows:
+            account = session.get(Account, t.account_id)
+            if account is not None and access.can_access(session, user, account):
+                set_category(session, user, t, body.category)
+                updated += 1
+        rule_id = _upsert_rule(session, user, text, body.category) if body.save_rule else None
         session.commit()
         return {"updated": updated, "rule_id": rule_id}
 

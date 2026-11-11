@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from .categories import categorize, is_card_payment
 from .models import Account, Statement, Transaction
-from .parsers import find_parser
+from .parsers import INSTITUTION_NAMES, find_parser
 from .parsers.base import reconcile
 from .parsers.pdftext import PdfPasswordError, extract_layout_text
 
@@ -42,10 +42,11 @@ class WrongInstitution(Exception):
 class AccountNeeded(Exception):
     """No account was given, and the owner does not have exactly one account for this bank."""
 
-    def __init__(self, institution: str, candidates: list[int]):
+    def __init__(self, institution: str, candidates: list[int], suggested: dict | None = None):
         super().__init__(f"choose an account for {institution}")
         self.institution = institution
         self.candidates = candidates
+        self.suggested = suggested
 
 
 class WrongAccount(Exception):
@@ -121,10 +122,17 @@ def _match_account(session: Session, account: Account | None, owner_accounts: li
             session.flush()
             return unnamed[0]
         # Only accounts that could take this statement are offered.
-        raise AccountNeeded(institution, [a.id for a in same_bank if not a.account_ref_last4])
+        compatible = [a.id for a in same_bank if not a.account_ref_last4]
+        raise AccountNeeded(institution, compatible, _suggest(institution, ref_last4) if not compatible else None)
     if len(same_bank) == 1:
         return same_bank[0]
-    raise AccountNeeded(institution, [a.id for a in same_bank])
+    raise AccountNeeded(institution, [a.id for a in same_bank], _suggest(institution, "") if not same_bank else None)
+
+
+def _suggest(institution: str, ref_last4: str) -> dict:
+    name = INSTITUTION_NAMES.get(institution, institution)
+    label = f"{name} ···{ref_last4}" if ref_last4 else name
+    return {"institution": institution, "account_ref_last4": ref_last4, "label": label}
 
 
 def import_pdf(

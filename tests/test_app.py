@@ -380,3 +380,28 @@ def test_account_with_statements_cannot_be_deleted(client, text_by_pdf):
     assert client.delete(f"/api/accounts/{account_id}", headers=as_user("helder")).status_code == 409
     empty = _account(client, "helder", "", "Empty")
     assert client.delete(f"/api/accounts/{empty}", headers=as_user("helder")).status_code == 200
+
+
+def test_upload_without_a_matching_account_suggests_one_to_create(client, text_by_pdf):
+    pdf = b"%PDF-1.4 suggest"
+    text_by_pdf[pdf] = basic_statement()
+    r = client.post("/api/statements", headers=as_user("helder"),
+                    files={"file": ("EXTRATO.pdf", pdf, "application/pdf")})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "account_needed"
+    assert detail["suggested"] == {"institution": "activobank", "account_ref_last4": "3456",
+                                   "label": "ActivoBank ···3456"}
+
+
+def test_bulk_category_by_text_updates_matching_rows_and_can_save_a_rule(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 bulk-text"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    r = client.post("/api/transactions/bulk-category-by-text", headers=as_user("helder"),
+                    json={"text": "PAG SERV", "category": "Services test", "save_rule": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["updated"] >= 1 and r.json()["rule_id"] is not None
+    items = client.get("/api/transactions?q=PAG SERV", headers=as_user("helder")).json()["items"]
+    assert items and all(t["category"] == "Services test" for t in items)

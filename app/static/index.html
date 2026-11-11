@@ -162,7 +162,17 @@ tr.total td { font-weight: 700; }
     </div>
     <div class="toolbar" style="margin-top:12px">
       <button class="small" id="tx-detect" data-i18n="detect_transfers">Find transfers</button>
+      <button class="small hidden" id="tx-by-text" data-i18n="by_text_button">Set category for all matching search</button>
       <span class="muted" id="tx-count"></span>
+    </div>
+  </div>
+  <div class="card hidden" id="tx-bulk">
+    <div class="row">
+      <div><label id="tx-sel-count"></label></div>
+      <div><label for="tx-bulk-cat" data-i18n="category">Category</label><select id="tx-bulk-cat"></select></div>
+      <div class="wide"><label for="tx-bulk-rule" data-i18n="bulk_rule_text">Also save a rule for this text (optional)</label><input id="tx-bulk-rule"></div>
+      <div class="auto"><button class="primary" id="tx-bulk-apply" data-i18n="bulk_apply">Apply to selected</button></div>
+      <div class="auto"><button id="tx-bulk-clear" data-i18n="bulk_clear">Clear selection</button></div>
     </div>
   </div>
   <div class="card">
@@ -311,6 +321,9 @@ en: {
   preferences:"Preferences", language:"Language", view_scope:"Accounts I see", scope_own:"Own and shared accounts", scope_all:"Also household accounts of other users",
   signed_in_as:"Signed in as", pdf_passwords:"Saved PDF passwords", pdf_pw_note:"Tried automatically on protected statements. Stored encrypted and never shown again.",
   password:"Password", transfers_title:"Transfers", transfers_note:"A transfer is a debit in one of your accounts matched with a credit of the same amount in another, within 5 days, with a transfer or card-payment description. Transfers are excluded from spending.",
+  bulk_selected:"{n} selected", bulk_apply:"Apply to selected", bulk_clear:"Clear selection", bulk_rule_text:"Also save a rule for this text (optional)",
+  by_text_button:"Set category for all matching search", by_text_title:"Set category for all matching \"{text}\"?", by_text_count:"{n} transactions match.", by_text_rule:"Also save a rule for \"{text}\"",
+  suggest_title:"Create this account?", suggest_note:"This statement is from {institution}, and no account matches it. Create \"{label}\" and import the file?", suggest_create:"Create and import", choose_title_short:"Choose",
   saved:"Saved", deleted:"Deleted", cancel:"Cancel", confirm:"Confirm", ok:"OK",
   yes:"yes", mark_transfer:"Transfer", unmark_transfer:"Not a transfer", delete_confirm:"Delete this?",
   similar_title:"Apply to similar transactions?", similar_note:"These transactions have a similar description. Tick the ones to change to {category}.",
@@ -349,6 +362,9 @@ pt: {
   preferences:"Preferências", language:"Idioma", view_scope:"Contas que vejo", scope_own:"Contas próprias e partilhadas", scope_all:"Também contas do agregado de outros utilizadores",
   signed_in_as:"Sessão iniciada como", pdf_passwords:"Palavras-passe de PDFs guardadas", pdf_pw_note:"Usadas automaticamente em extratos protegidos. Guardadas cifradas e nunca mostradas de novo.",
   password:"Palavra-passe", transfers_title:"Transferências", transfers_note:"Uma transferência é um débito numa das suas contas com um crédito do mesmo valor noutra, até 5 dias depois, com descrição de transferência ou pagamento de cartão. Não contam como despesa.",
+  bulk_selected:"{n} selecionados", bulk_apply:"Aplicar aos selecionados", bulk_clear:"Limpar seleção", bulk_rule_text:"Guardar também uma regra para este texto (opcional)",
+  by_text_button:"Definir categoria de todos os resultados da pesquisa", by_text_title:"Definir categoria de todos os \"{text}\"?", by_text_count:"{n} movimentos correspondem.", by_text_rule:"Guardar também uma regra para \"{text}\"",
+  suggest_title:"Criar esta conta?", suggest_note:"Este extrato é do {institution} e nenhuma conta lhe corresponde. Criar \"{label}\" e importar o ficheiro?", suggest_create:"Criar e importar", choose_title_short:"Escolher",
   saved:"Guardado", deleted:"Apagado", cancel:"Cancelar", confirm:"Confirmar", ok:"OK",
   yes:"sim", mark_transfer:"Transferência", unmark_transfer:"Não é transferência", delete_confirm:"Apagar?",
   similar_title:"Aplicar a movimentos semelhantes?", similar_note:"Estes movimentos têm descrição semelhante. Marque os que quer alterar para {category}.",
@@ -607,6 +623,14 @@ function txQuery(offset) {
   p.set("limit", PAGE); p.set("offset", offset);
   return p.toString();
 }
+const selected = new Set();
+function updateBulkBar() {
+  const n = selected.size;
+  $("tx-bulk").classList.toggle("hidden", n === 0);
+  $("tx-sel-count").textContent = t("bulk_selected", { n });
+  const q = $("tx-q").value.trim();
+  $("tx-by-text").classList.toggle("hidden", q.length < 2);
+}
 LOADERS.transactions = async () => {
   await loadAccounts(); await loadCategories();
   const data = await api("transactions?" + txQuery(txPage * PAGE));
@@ -615,9 +639,24 @@ LOADERS.transactions = async () => {
   $("tx-page").textContent = txTotal ? `${txPage * PAGE + 1}–${Math.min(txTotal, (txPage + 1) * PAGE)} / ${txTotal}` : "";
   $("tx-prev").disabled = txPage === 0;
   $("tx-next").disabled = (txPage + 1) * PAGE >= txTotal;
+  $("tx-bulk-cat").replaceChildren(...cache.categories.map(c => el("option", { value: c, text: c })));
+  updateBulkBar();
   if (!data.items.length) { $("tx-table").replaceChildren(el("p", { class: "muted", text: t("no_transactions") })); return; }
+  const allBox = el("input", { type: "checkbox", "aria-label": "select all" });
+  const rowBoxes = [];
+  allBox.addEventListener("change", () => {
+    rowBoxes.forEach(b => { b.checked = allBox.checked; if (allBox.checked) selected.add(Number(b.value)); else selected.delete(Number(b.value)); });
+    updateBulkBar();
+  });
   const rows = data.items.map(tx => {
     const amt = Number(tx.amount);
+    const box = el("input", { type: "checkbox", value: tx.id, "aria-label": tx.description, checked: selected.has(tx.id) ? "checked" : null });
+    rowBoxes.push(box);
+    box.addEventListener("change", () => {
+      if (box.checked) selected.add(tx.id); else selected.delete(tx.id);
+      allBox.checked = rowBoxes.every(b => b.checked);
+      updateBulkBar();
+    });
     const catSelect = el("select", { "aria-label": t("category"), on: { change: async (ev) => {
       await changeCategory(tx, ev.target.value);
     } } }, cache.categories.map(c => el("option", { value: c, text: c, selected: c === tx.category ? "selected" : null })));
@@ -629,6 +668,7 @@ LOADERS.transactions = async () => {
       } catch (e) { toast("error", errorText(e)); }
     } } });
     return el("tr", { class: tx.is_transfer ? "transfer" : "" }, [
+      el("td", {}, box),
       el("td", { text: tx.booked_on }),
       el("td", { class: "desc", text: tx.description }),
       el("td", { class: "cat" }, catSelect),
@@ -639,12 +679,56 @@ LOADERS.transactions = async () => {
   });
   $("tx-table").replaceChildren(el("table", {}, [
     el("thead", {}, el("tr", {}, [
+      el("th", {}, allBox),
       el("th", { text: lang === "pt" ? "Data" : "Date" }), el("th", { text: lang === "pt" ? "Descrição" : "Description" }),
       el("th", { text: t("category") }), el("th", { text: t("account") }), el("th", { class: "num", text: lang === "pt" ? "Valor" : "Amount" }), el("th", { text: t("transfers") }),
     ])),
     el("tbody", {}, rows),
   ]));
+  allBox.checked = rowBoxes.length > 0 && rowBoxes.every(b => b.checked);
 };
+
+$("tx-bulk-clear").addEventListener("click", () => { selected.clear(); LOADERS.transactions().catch(() => {}); });
+$("tx-bulk-apply").addEventListener("click", async () => {
+  const ids = [...selected];
+  if (!ids.length) return;
+  const category = $("tx-bulk-cat").value;
+  const rule = $("tx-bulk-rule").value.trim();
+  const ok = await confirmBox(lang === "pt" ? `Definir "${category}" em ${ids.length} movimentos?` : `Set "${category}" on ${ids.length} transactions?`);
+  if (!ok) return;
+  try {
+    const r = await api("transactions/bulk-category", { method: "POST", json: { ids, category, save_rule: rule.length >= 2 ? rule : null } });
+    toast("success", t("bulk_updated", { n: r.updated }), rule.length >= 2 ? t("rule_saved") : "");
+    selected.clear(); $("tx-bulk-rule").value = "";
+    LOADERS.transactions();
+  } catch (e) { toast("error", errorText(e)); }
+});
+
+$("tx-by-text").addEventListener("click", async () => {
+  const text = $("tx-q").value.trim();
+  if (text.length < 2) return;
+  const probe = await api("transactions?" + new URLSearchParams({ q: text, limit: 1, transfers: "include" }).toString());
+  const choice = await modal((box, done) => {
+    const sel = el("select", {}, cache.categories.map(c => el("option", { value: c, text: c })));
+    const rule = el("input", { type: "checkbox" });
+    box.append(
+      el("h2", { text: t("by_text_title", { text }) }),
+      el("p", { class: "muted", text: t("by_text_count", { n: probe.total }) }),
+      el("label", {}, t("category")), sel,
+      el("label", { style: "display:flex;gap:8px;align-items:center;margin-top:10px" }, [rule, el("span", { text: t("by_text_rule", { text }) })]),
+      el("div", { class: "actions" }, [
+        el("button", { text: t("cancel"), on: { click: () => done(null) } }),
+        el("button", { class: "primary", text: t("apply_selected"), on: { click: () => done({ category: sel.value, rule: rule.checked }) } }),
+      ]),
+    );
+  });
+  if (!choice) return;
+  try {
+    const r = await api("transactions/bulk-category-by-text", { method: "POST", json: { text, category: choice.category, save_rule: choice.rule } });
+    toast("success", t("bulk_updated", { n: r.updated }), choice.rule ? t("rule_saved") : "");
+    LOADERS.transactions();
+  } catch (e) { toast("error", errorText(e)); }
+});
 
 async function changeCategory(tx, category) {
   try {
@@ -683,6 +767,7 @@ async function changeCategory(tx, category) {
 $("tx-apply").addEventListener("click", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); });
 ["tx-account", "tx-category", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
 $("tx-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { txPage = 0; LOADERS.transactions().catch(() => {}); } });
+$("tx-q").addEventListener("input", updateBulkBar);
 $("tx-prev").addEventListener("click", () => { txPage = Math.max(0, txPage - 1); LOADERS.transactions().catch(() => {}); });
 $("tx-next").addEventListener("click", () => { txPage += 1; LOADERS.transactions().catch(() => {}); });
 $("tx-detect").addEventListener("click", detectTransfers);
@@ -769,6 +854,27 @@ $("up-go").addEventListener("click", async () => {
           const pw = await promptPassword(file);
           if (!pw) { counts.err++; setLine(errorText(e), "neg"); toast("error", file.name, errorText(e)); break; }
           password = pw; continue;
+        }
+        if (e.code === "account_needed" && e.data.suggested) {
+          const sug = e.data.suggested;
+          const yes = await modal((box, done) => {
+            box.append(
+              el("h2", { text: t("suggest_title") }),
+              el("p", { class: "muted", text: t("suggest_note", { institution: sug.institution, label: sug.label }) }),
+              el("div", { class: "actions" }, [
+                el("button", { text: t("skip_file"), on: { click: () => done(false) } }),
+                el("button", { class: "primary", text: t("suggest_create"), on: { click: () => done(true) } }),
+              ]),
+            );
+          });
+          if (!yes) { counts.err++; setLine(t("no_account_match"), "neg"); toast("error", file.name, t("no_account_match"), 8000); break; }
+          try {
+            const created = await api("accounts", { method: "POST", json: { institution: sug.institution, label: sug.label, account_ref_last4: sug.account_ref_last4 || "", household: false } });
+            account = created.id;
+            await loadAccounts();
+            toast("success", t("saved"), sug.label);
+          } catch (err) { counts.err++; setLine(errorText(err), "neg"); toast("error", errorText(err)); break; }
+          continue;
         }
         if (e.code === "account_needed") {
           const options = e.data.accounts || [];

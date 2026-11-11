@@ -12,6 +12,12 @@ PARSERS: list[StatementParser] = [
 ]
 
 
+INSTITUTION_NAMES = {
+    "activobank": "ActivoBank", "affinity": "Affinity", "wizink": "WiZink",
+    "cofidis": "Cofidis", "universo": "Universo", "cetelem": "Cetelem",
+}
+
+
 class NoParserError(LookupError):
     pass
 
