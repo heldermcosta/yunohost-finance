@@ -133,6 +133,10 @@ tbody tr:hover td { background: var(--card-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.desc { min-width: 200px; }
 td.cat select { max-width: 220px; min-height: 30px; padding: 3px 8px; font-size: 13px; }
+.cat-label {
+  display: inline-block; max-width: 220px; min-height: 28px; padding: 3px 10px; font-size: 13px; text-align: left;
+  border-radius: 999px; background: var(--card-2); border-color: var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 tr.transfer td { color: var(--muted); }
 tr.total td { font-weight: 700; background: var(--card-2); }
 tr.total:hover td { background: var(--card-2); }
@@ -1292,15 +1296,12 @@ async function loadObjects() {
 }
 // Collects every row that matches the filters, one request per 1000 rows.
 async function fetchAllTransactions() {
-  const items = [];
-  let total = 0;
-  for (let offset = 0; offset < 100000; offset += TX_CHUNK) {
-    const data = await api("transactions?" + txQuery(offset));
-    total = data.total;
-    items.push(...data.items);
-    if (!data.items.length || items.length >= total) break;
-  }
-  return { items, total };
+  const first = await api("transactions?" + txQuery(0));
+  const total = first.total;
+  const offsets = [];
+  for (let offset = TX_CHUNK; offset < total && offset < 100000; offset += TX_CHUNK) offsets.push(offset);
+  const rest = await Promise.all(offsets.map(offset => api("transactions?" + txQuery(offset))));
+  return { items: [first.items, ...rest.map(r => r.items)].flat(), total };
 }
 LOADERS.transactions = async () => {
   await loadAccounts(); await loadCategories(); loadObjects().catch(() => {});
@@ -1329,10 +1330,7 @@ LOADERS.transactions = async () => {
       allBox.checked = rowBoxes.every(b => b.checked);
       updateBulkBar();
     });
-    const catSelect = el("select", { "aria-label": t("category"), on: { change: async (ev) => {
-      await changeCategory(tx, ev.target.value);
-    } } }, cache.categories.map(c => el("option", { value: c, text: c, selected: c === tx.category ? "selected" : null })));
-    if (!cache.categories.includes(tx.category)) catSelect.prepend(el("option", { value: tx.category, text: tx.category, selected: "selected" }));
+    const catCell = categoryCell(tx);
     const transferBtn = el("button", { class: "small", text: tx.is_transfer ? t("unmark_transfer") : t("mark_transfer"), on: { click: async () => {
       try {
         await api("transactions/" + tx.id, { method: "PATCH", json: { is_transfer: !tx.is_transfer } });
@@ -1343,7 +1341,7 @@ LOADERS.transactions = async () => {
       el("td", {}, box),
       el("td", { text: tx.booked_on }),
       el("td", { class: "desc" }, [tx.description, tx.object_name ? el("div", { class: "muted", text: tx.object_name }) : null]),
-      el("td", { class: "cat" }, catSelect),
+      el("td", { class: "cat" }, catCell),
       el("td", { text: tx.account }),
       el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
       el("td", {}, [pdfButton(tx.statement_id), " ", transferBtn]),
@@ -1402,12 +1400,27 @@ $("tx-by-text").addEventListener("click", async () => {
   } catch (e) { toast("error", errorText(e)); }
 });
 
+// Shows the category as text. Only the clicked row builds a dropdown, so a long list stays fast.
+function categoryCell(tx) {
+  const label = el("button", { class: "cat-label", type: "button", text: tx.category, title: L("Change category", "Alterar categoria") });
+  label.addEventListener("click", () => {
+    const names = cache.categories.includes(tx.category) ? cache.categories : [tx.category, ...cache.categories];
+    const select = el("select", { "aria-label": t("category") }, names.map(c => el("option", { value: c, text: c, selected: c === tx.category ? "selected" : null })));
+    const restore = () => select.replaceWith(label);
+    select.addEventListener("change", async () => { select.disabled = true; await changeCategory(tx, select.value); });
+    select.addEventListener("blur", () => setTimeout(() => { if (select.isConnected) restore(); }, 150));
+    label.replaceWith(select);
+    select.focus();
+  });
+  return label;
+}
+
 async function changeCategory(tx, category) {
   try {
     await api("transactions/" + tx.id, { method: "PATCH", json: { category } });
   } catch (e) { toast("error", errorText(e)); return; }
   let similar = [];
-  try { similar = await api(`transactions/${tx.id}/similar`); } catch (e) {}
+  try { similar = (await api(`transactions/${tx.id}/similar`)) || []; } catch (e) {}
   if (!similar.length) { toast("success", t("saved")); return; }
   const key = (tx.description.split(/\s+/).filter(w => w.length > 2).slice(0, 2).join(" ")) || tx.description;
   const choice = await modal((box, done) => {
