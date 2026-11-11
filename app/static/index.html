@@ -302,6 +302,9 @@ details.cat ul { margin: 4px 0 8px 18px; padding: 0; }
 /* Modal */
 .overlay { position: fixed; inset: 0; background: rgba(8, 10, 16, .5); display: none; align-items: center; justify-content: center; z-index: 40; padding: 16px; backdrop-filter: blur(2px); }
 .overlay.open { display: flex; }
+kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; background: var(--card-2); }
+table.shortcuts td { padding: 6px 10px 6px 0; border: 0; }
+#kb-help { margin-left: auto; min-width: 32px; }
 .modal {
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px;
   width: min(560px, 100%); max-height: 86vh; overflow: auto; box-shadow: var(--shadow-lg);
@@ -346,6 +349,7 @@ tr.cg-row td:first-child { width: 28px; }
     <button data-tab="accounts" data-i18n="tab_accounts">Accounts</button>
     <button data-tab="settings" data-i18n="tab_settings">Settings</button>
   </nav>
+  <button id="kb-help" class="small" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 </header>
 
 <main>
@@ -801,11 +805,13 @@ async function api(path, opts = {}) {
 const errorText = (e) => e.code && t("err_" + e.code) !== "err_" + e.code ? t("err_" + e.code) : e.message;
 
 /* ---------- modal ---------- */
+let closeModalWith = null; // closes the open dialog as "cancelled"; set by modal()
 function modal(build) {
   return new Promise(resolve => {
     const box = $("modal");
     box.replaceChildren();
-    const done = (value) => { $("overlay").classList.remove("open"); resolve(value); };
+    const done = (value) => { closeModalWith = null; $("overlay").classList.remove("open"); resolve(value); };
+    closeModalWith = () => done(false);
     build(box, done);
     $("overlay").classList.add("open");
   });
@@ -1241,7 +1247,52 @@ $("pdf-download").addEventListener("click", () => {
   const a = el("a", { href: pdfUrl, download: pdfName });
   document.body.append(a); a.click(); a.remove();
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("pdf-overlay").classList.contains("open")) closePdfViewer(); });
+/* ---------- keyboard ---------- */
+// Keys work when no text field has focus and no dialog is open. 1-9 switch tabs in menu order,
+// / searches transactions, ← and → move the overview period, ? lists the shortcuts, Esc closes a dialog.
+function shortcutsHelp() {
+  const rows = [
+    ["1 – 9", L("Switch tab, in the order of the menu", "Mudar de separador, pela ordem do menu")],
+    ["/", L("Search transactions", "Pesquisar movimentos")],
+    ["← →", L("Move the overview period back or forward by its length", "Mover o período do resumo para trás ou para a frente")],
+    ["Esc", L("Close a dialog or the PDF viewer", "Fechar uma janela ou o visualizador de PDF")],
+    ["?", L("Show this list", "Mostrar esta lista")],
+  ];
+  modal((box, done) => {
+    box.append(
+      el("h2", { text: L("Keyboard shortcuts", "Atalhos de teclado") }),
+      el("table", { class: "shortcuts" }, rows.map(([keys, text]) => el("tr", {}, [
+        el("td", {}, [el("kbd", { text: keys })]), el("td", { text }),
+      ]))),
+      el("div", { class: "actions" }, [el("button", { class: "primary", text: L("Close", "Fechar"), on: { click: () => done(true) } })]),
+    );
+  });
+}
+document.getElementById("kb-help").addEventListener("click", shortcutsHelp);
+document.addEventListener("keydown", (e) => {
+  const dialogOpen = $("overlay").classList.contains("open") || $("pdf-overlay").classList.contains("open");
+  if (e.key === "Escape") {
+    if ($("pdf-overlay").classList.contains("open")) closePdfViewer();
+    else if ($("overlay").classList.contains("open") && closeModalWith) closeModalWith();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey || dialogOpen) return;
+  if (e.target.closest && e.target.closest("input, select, textarea, [contenteditable]")) return;
+  if (/^[1-9]$/.test(e.key)) {
+    const name = [...document.querySelectorAll("#tabs button")].map(b => b.dataset.tab)[Number(e.key) - 1];
+    if (name) { e.preventDefault(); showTab(name); }
+  } else if (e.key === "/") {
+    e.preventDefault(); showTab("transactions"); $("tx-q").focus();
+  } else if (e.key === "?") {
+    e.preventDefault(); shortcutsHelp();
+  } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && currentTab === "overview") {
+    const start = $("ov-start").value, end = $("ov-month").value;
+    if (!start || !end) return;
+    e.preventDefault();
+    const span = monthsBetween(start, end) + 1, step = e.key === "ArrowLeft" ? -span : span;
+    setPeriod(addMonths(start, step), addMonths(end, step), { moved: "end" });
+  }
+});
 const pdfButton = (statementId) => statementId
   ? el("button", { class: "small", type: "button", text: L("PDF", "PDF"), title: L("Open the statement this came from", "Abrir o extrato de origem"),
                    "aria-label": L("Open the statement this came from", "Abrir o extrato de origem"),
