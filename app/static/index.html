@@ -232,7 +232,7 @@ tr.total td { font-weight: 700; }
   <div class="card">
     <h2 data-i18n="categories">Categories</h2>
     <div class="row">
-      <div class="wide"><label for="cat-new" data-i18n="new_category">New category</label><input id="cat-new"></div>
+      <div class="wide"><label for="cat-new" data-i18n="new_category">New category</label><input id="cat-new" placeholder="Housing &amp; Utilities > Water"><div class="muted" data-i18n="cat_hint">Use Parent &gt; Child for a subcategory. Renaming a parent renames its subcategories.</div></div>
       <div class="auto"><button id="cat-add" data-i18n="add">Add</button></div>
     </div>
     <div class="table-wrap" id="cat-table" style="margin-top:12px"></div>
@@ -319,7 +319,7 @@ en: {
   review_title:"Waiting for review", review_note:"Accept a statement once you have checked it. Deleting removes the statement and its PDF.", nothing_review:"Nothing waiting for review.",
   rules_title:"Category rules", rules_note:"If a description contains the text, the transaction gets that category. Manual choices are never overwritten.",
   add_rule:"Add a rule", description_contains:"Description contains", apply_existing:"Apply to existing transactions", categories:"Categories",
-  new_category:"New category", add:"Add", rename:"Rename", delete:"Delete", no_rules:"No rules yet.",
+  new_category:"New category", cat_hint:"Use Parent > Child for a subcategory. Renaming a parent renames its subcategories.", add:"Add", rename:"Rename", delete:"Delete", no_rules:"No rules yet.",
   accounts:"Accounts", new_account:"New account", bank:"Bank", label:"Name", last4:"Last 4 digits of the account number", household:"Household account", create:"Create",
   household_short:"Household", statements_title:"Statements", statements_none:"No statements yet.", st_account:"Account", st_file:"File", st_period:"Period", st_status:"Status", st_count:"Transactions", bank_prompt:"Bank (for example activobank, bankinter)", owner:"Owner", you:"You", shared_by:"Shared by {owner}", share_with:"Share with (username)", share:"Share", unshare:"Remove", edit:"Edit",
   preferences:"Preferences", language:"Language", view_scope:"Accounts I see", scope_own:"Own and shared accounts", scope_all:"Also household accounts of other users",
@@ -360,7 +360,7 @@ pt: {
   review_title:"A aguardar revisão", review_note:"Aceite um extrato depois de o verificar. Apagar remove o extrato e o seu PDF.", nothing_review:"Nada a aguardar revisão.",
   rules_title:"Regras de categoria", rules_note:"Se a descrição contiver o texto, o movimento recebe essa categoria. As escolhas manuais nunca são substituídas.",
   add_rule:"Adicionar uma regra", description_contains:"A descrição contém", apply_existing:"Aplicar aos movimentos existentes", categories:"Categorias",
-  new_category:"Nova categoria", add:"Adicionar", rename:"Renomear", delete:"Apagar", no_rules:"Ainda não há regras.",
+  new_category:"Nova categoria", cat_hint:"Use Pai > Filho para uma subcategoria. Renomear a categoria principal renomeia as subcategorias.", add:"Adicionar", rename:"Renomear", delete:"Apagar", no_rules:"Ainda não há regras.",
   accounts:"Contas", new_account:"Nova conta", bank:"Banco", label:"Nome", last4:"Últimos 4 dígitos do número da conta", household:"Conta do agregado", create:"Criar",
   household_short:"Agregado", statements_title:"Extratos", statements_none:"Ainda não há extratos.", st_account:"Conta", st_file:"Ficheiro", st_period:"Período", st_status:"Estado", st_count:"Movimentos", bank_prompt:"Banco (por exemplo activobank, bankinter)", owner:"Titular", you:"Você", shared_by:"Partilhada por {owner}", share_with:"Partilhar com (utilizador)", share:"Partilhar", unshare:"Remover", edit:"Editar",
   preferences:"Preferências", language:"Idioma", view_scope:"Contas que vejo", scope_own:"Contas próprias e partilhadas", scope_all:"Também contas do agregado de outros utilizadores",
