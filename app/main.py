@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto, exports
+from .duplicates import StatementMovements, find_duplicate_statements, movement_signature, repeated_amounts
 from .version import __version__
 from .auth import username_from_authorization
 from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category, parent_of
@@ -737,6 +738,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def summary_years(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[int]:
         rows = accepted_query(session, user).with_entities(Transaction.booked_on).distinct().all()
         return sorted({r[0].year for r in rows}, reverse=True)
+
+    @app.get("/api/duplicates")
+    def duplicates(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        """Accepted statements that repeat each other's movements (rule in app/duplicates.py)."""
+        statements = (session.query(Statement)
+                      .filter(Statement.account_id.in_(visible_ids(session, user)), Statement.status == "accepted").all())
+        signatures: dict[int, set] = defaultdict(set)
+        for row in (session.query(Transaction.statement_id, Transaction.booked_on, Transaction.amount,
+                                  Transaction.description, Transaction.balance)
+                    .filter(Transaction.statement_id.in_([st.id for st in statements])).all()):
+            signatures[row[0]].add(movement_signature(row[1], row[2], row[3], row[4]))
+        records = [StatementMovements(st.id, st.account_id, st.period_start, st.period_end, st.original_name,
+                                      frozenset(signatures.get(st.id, ()))) for st in statements]
+        labels = account_labels(session, user)
+        owned = {a.id: access.is_owner(user, a) for a in session.query(Account).filter(Account.id.in_({st.account_id for st in statements}))}
+
+        def side(record) -> dict:
+            return {"id": record.id, "file": record.file, "period": [record.period_start.isoformat(), record.period_end.isoformat()]}
+
+        items = []
+        for pair in find_duplicate_statements(records):
+            income, spending = repeated_amounts(pair)
+            items.append({
+                "account": labels.get(pair["first"].account_id, ""),
+                "first": side(pair["first"]), "second": side(pair["second"]),
+                "shared": pair["shared"], "identical": pair["identical"],
+                "income_twice": str(income), "spending_twice": str(spending),
+                "can_delete": owned.get(pair["second"].account_id, False),
+            })
+        return {
+            "count": len(items),
+            "income_twice": str(sum((Decimal(i["income_twice"]) for i in items), Decimal(0))),
+            "spending_twice": str(sum((Decimal(i["spending_twice"]) for i in items), Decimal(0))),
+            "pairs": items,
+        }
 
     @app.get("/api/insights")
     def insights(month: str | None = None, start: str | None = None,
