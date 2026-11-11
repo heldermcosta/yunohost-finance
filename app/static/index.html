@@ -1342,8 +1342,9 @@ LOADERS.transactions = async () => {
     return el("tr", { class: tx.is_transfer ? "transfer" : "" }, [
       el("td", {}, box),
       el("td", { text: tx.booked_on }),
-      el("td", { class: "desc" }, [tx.description, tx.object_name ? el("div", { class: "muted", text: tx.object_name }) : null]),
+      el("td", { class: "desc" }, tx.description),
       el("td", { class: "cat" }, catCell),
+      el("td", { class: "obj" }, objectCell(tx)),
       el("td", { text: tx.account }),
       el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
       el("td", {}, [pdfButton(tx.statement_id), " ", transferBtn]),
@@ -1353,7 +1354,7 @@ LOADERS.transactions = async () => {
     el("thead", {}, el("tr", {}, [
       el("th", {}, allBox),
       el("th", { text: lang === "pt" ? "Data" : "Date" }), el("th", { text: lang === "pt" ? "Descrição" : "Description" }),
-      el("th", { text: t("category") }), el("th", { text: t("account") }), el("th", { class: "num", text: lang === "pt" ? "Valor" : "Amount" }), el("th", { text: t("transfers") }),
+      el("th", { text: t("category") }), el("th", { text: t("object") }), el("th", { text: t("account") }), el("th", { class: "num", text: lang === "pt" ? "Valor" : "Amount" }), el("th", { text: t("transfers") }),
     ])),
     el("tbody", {}, rows),
   ]));
@@ -1401,6 +1402,44 @@ $("tx-by-text").addEventListener("click", async () => {
     LOADERS.transactions();
   } catch (e) { toast("error", errorText(e)); }
 });
+
+// Shows the object as text (or a hint when there is none). A click opens a field with the
+// objects already in use as suggestions. Enter or leaving the field saves; Escape cancels.
+function objectCell(tx) {
+  const label = el("button", { class: "cat-label", type: "button", title: L("Set object", "Definir objeto") });
+  const showValue = (value) => {
+    label.replaceChildren(value ? document.createTextNode(value) : el("span", { class: "muted", text: t("object_hint") }));
+  };
+  showValue(tx.object_name || "");
+  label.addEventListener("click", () => {
+    const input = el("input", { type: "text", list: "objects-list", maxlength: "60", value: tx.object_name || "",
+      placeholder: t("object_hint"), "aria-label": t("object") });
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const value = input.value.trim();
+      if (!save || value === (tx.object_name || "")) { input.replaceWith(label); return; }
+      input.disabled = true;
+      try {
+        await api("transactions/" + tx.id, { method: "PATCH", json: { object_name: value } });
+        tx.object_name = value || null;
+        showValue(value);
+        loadObjects().catch(() => {});
+        toast("success", t("saved"));
+      } catch (e) { toast("error", errorText(e)); }
+      input.replaceWith(label);
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener("blur", () => finish(true));
+    label.replaceWith(input);
+    input.focus();
+  });
+  return label;
+}
 
 // Shows the category as text. Only the clicked row builds a dropdown, so a long list stays fast.
 function categoryCell(tx) {

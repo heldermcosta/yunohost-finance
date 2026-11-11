@@ -471,6 +471,24 @@ def test_bulk_category_by_text_updates_matching_rows_and_can_save_a_rule(client,
     assert items and all(t["category"] == "Services test" for t in items)
 
 
+def test_object_can_be_set_cleared_and_is_listed_as_a_suggestion(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 object-edit"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    target = client.get("/api/transactions", headers=as_user("helder")).json()["items"][0]
+
+    r = client.patch(f"/api/transactions/{target['id']}", headers=as_user("helder"),
+                     json={"object_name": "  Carro  "})
+    assert r.status_code == 200, r.text
+    assert r.json()["object_name"] == "Carro"
+    assert "Carro" in client.get("/api/objects", headers=as_user("helder")).json()
+
+    r = client.patch(f"/api/transactions/{target['id']}", headers=as_user("helder"), json={"object_name": ""})
+    assert r.status_code == 200, r.text
+    assert r.json()["object_name"] is None
+
+
 def test_budget_on_parent_counts_its_subcategories(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 sub-budget"
