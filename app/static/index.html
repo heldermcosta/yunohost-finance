@@ -1812,9 +1812,9 @@ function renderCategorise() {
         } } })),
       el("td", { text: i.booked_on }),
       el("td", { text: i.account || "–" }),
-      el("td", {}, pdfButton(i.statement_id)),
       el("td", { class: "desc", text: i.description }),
       el("td", { text: i.amount }),
+      el("td", {}, pdfButton(i.statement_id)),
     ]))),
   ])));
 
