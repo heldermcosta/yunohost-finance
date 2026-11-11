@@ -496,3 +496,26 @@ def test_renaming_a_parent_renames_its_subcategories(client, text_by_pdf):
     assert f"Groceries{SEPARATOR}Supermarket" not in names
     rows = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
     assert any(t["category"] == f"Food{SEPARATOR}Supermarket" for t in rows)
+
+
+def test_insights_for_a_month(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 insights"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    r = client.get("/api/insights?month=2026-05", headers=as_user("helder"))
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["month"] == "2026-05" and data["previous_month"] == "2026-04"
+    assert Decimal(data["expenses"]) > 0
+    assert Decimal(data["net"]) == Decimal(data["income"]) - Decimal(data["expenses"])
+    assert len(data["trend"]) == 12 and data["trend"][-1]["month"] == "2026-05"
+    assert data["categories"] and data["categories"][0]["share"] > 0
+    assert data["largest_expenses"][0]["amount"].startswith("-")
+    assert data["balances"] and data["balances"][0]["closing_balance"]
+    assert client.get("/api/insights?month=2026-13", headers=as_user("helder")).status_code == 422
+
+
+def test_insights_empty_database(client):
+    make_account(client, "helder")
+    assert client.get("/api/insights", headers=as_user("helder")).json() == {"month": None}

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto, exports
 from .auth import username_from_authorization
-from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category
+from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category, parent_of
 from .config import Settings
 from .db import setup_schema
 from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, WrongAccount,
@@ -31,6 +31,10 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 PDF_PASSWORD_AAD = b"pdf-password"
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+
+
+def _valid_month(month: str) -> bool:
+    return bool(MONTH_RE.match(month)) and 1 <= int(month[5:]) <= 12
 
 
 class AccountIn(BaseModel):
@@ -96,6 +100,15 @@ class BudgetIn(BaseModel):
 
 def _err(status: int, code: str, message: str, **extra) -> HTTPException:
     return HTTPException(status_code=status, detail={"code": code, "message": message, **extra})
+
+
+# Institutions whose statements show what is owed, not a bank balance.
+CARD_INSTITUTIONS = {"affinity", "wizink", "cofidis", "universo", "cetelem"}
+
+
+def _shift_month(month: str, offset: int) -> str:
+    index = int(month[:4]) * 12 + (int(month[5:]) - 1) + offset
+    return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
 def _description_key(description: str) -> str:
@@ -537,6 +550,139 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rows = accepted_query(session, user).with_entities(Transaction.booked_on).distinct().all()
         return sorted({r[0].year for r in rows}, reverse=True)
 
+    @app.get("/api/insights")
+    def insights(month: str | None = None, user: User = Depends(get_current_user),
+                 session: Session = Depends(get_session)) -> dict:
+        """Figures for one month, compared with the month before. Transfers are left out."""
+        rows = accepted_query(session, user).filter(Transaction.is_transfer.is_(False)).all()
+        with_data = sorted({t.booked_on.strftime("%Y-%m") for t in rows})
+        if not with_data:
+            return {"month": None}
+        if month is None:
+            month = with_data[-1]
+        if not _valid_month(month):
+            raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+        prev = _shift_month(month, -1)
+
+        by_month: dict[str, list[Transaction]] = defaultdict(list)
+        for t in rows:
+            by_month[t.booked_on.strftime("%Y-%m")].append(t)
+
+        def totals(items: list[Transaction]) -> tuple[Decimal, Decimal]:
+            income = sum((t.amount for t in items if t.amount > 0), Decimal("0"))
+            expenses = sum((-t.amount for t in items if t.amount < 0), Decimal("0"))
+            return income, expenses
+
+        cur_items = by_month.get(month, [])
+        income, expenses = totals(cur_items)
+        prev_income, prev_expenses = totals(by_month.get(prev, []))
+        net = income - expenses
+
+        def change(now: Decimal, before: Decimal) -> float | None:
+            return round(float((now - before) / before * 100), 1) if before > 0 else None
+
+        earlier = [m for m in with_data if m < month][-3:]
+        avg_3m = (sum((totals(by_month[m])[1] for m in earlier), Decimal("0")) / len(earlier)) if earlier else None
+
+        # Spending by category, grouped under the parent, with subcategories.
+        parent_now: dict[str, Decimal] = defaultdict(Decimal)
+        parent_prev: dict[str, Decimal] = defaultdict(Decimal)
+        children: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+        for t in cur_items:
+            if t.amount < 0:
+                parent_now[parent_of(t.category)] += -t.amount
+                if SEPARATOR in t.category:
+                    children[parent_of(t.category)][t.category] += -t.amount
+        for t in by_month.get(prev, []):
+            if t.amount < 0:
+                parent_prev[parent_of(t.category)] += -t.amount
+        categories = []
+        for name, total in sorted(parent_now.items(), key=lambda kv: kv[1], reverse=True):
+            categories.append({
+                "category": name, "total": str(total),
+                "share": round(float(total / expenses * 100), 1) if expenses else 0.0,
+                "change": change(total, parent_prev.get(name, Decimal("0"))),
+                "children": [{"category": c, "total": str(v)}
+                             for c, v in sorted(children[name].items(), key=lambda kv: kv[1], reverse=True)],
+            })
+
+        expense_rows = [t for t in cur_items if t.amount < 0]
+        merchants: dict[str, dict] = {}
+        for t in expense_rows:
+            key = _description_key(t.description) or t.description.upper()[:20]
+            entry = merchants.setdefault(key, {"name": key, "total": Decimal("0"), "count": 0})
+            entry["total"] += -t.amount
+            entry["count"] += 1
+        top_merchants = sorted(merchants.values(), key=lambda m: m["total"], reverse=True)[:8]
+
+        largest = sorted(expense_rows, key=lambda t: t.amount)[:5]
+
+        # Recurring: the same merchant with spending in at least 3 of the last 6 months.
+        window = {_shift_month(month, -i) for i in range(6)}
+        recent: dict[str, dict] = {}
+        for m in sorted(window):
+            for t in by_month.get(m, []):
+                if t.amount < 0:
+                    key = _description_key(t.description)
+                    if not key:
+                        continue
+                    entry = recent.setdefault(key, {"name": key, "months": set(), "amounts": []})
+                    entry["months"].add(m)
+                    entry["amounts"].append(-t.amount)
+        recurring = [
+            {"name": e["name"], "months": len(e["months"]),
+             "average": str((sum(e["amounts"]) / len(e["amounts"])).quantize(Decimal("0.01")))}
+            for e in recent.values() if len(e["months"]) >= 3
+        ]
+        recurring.sort(key=lambda r: Decimal(r["average"]), reverse=True)
+
+        trend = []
+        for i in range(11, -1, -1):
+            m = _shift_month(month, -i)
+            inc, exp = totals(by_month.get(m, []))
+            trend.append({"month": m, "income": str(inc), "expenses": str(exp)})
+
+        uncategorised = [t for t in expense_rows if t.category == UNCATEGORISED]
+
+        # Latest accepted statement per account, for balances.
+        visible = visible_ids(session, user)
+        latest: dict[int, Statement] = {}
+        for st in (session.query(Statement).filter(Statement.account_id.in_(visible), Statement.status == "accepted")
+                   .order_by(Statement.period_end.desc(), Statement.id.desc()).all()):
+            latest.setdefault(st.account_id, st)
+        labels = account_labels(session, user)
+        balances = []
+        for account_id, st in latest.items():
+            account = session.get(Account, account_id)
+            is_card = account is not None and account.institution in CARD_INSTITUTIONS
+            balances.append({"account": labels.get(account_id, ""), "institution": account.institution if account else "",
+                             "is_card": is_card, "closing_balance": str(st.closing_balance),
+                             "as_of": st.period_end.isoformat()})
+        bank_total = sum((Decimal(b["closing_balance"]) for b in balances if not b["is_card"]), Decimal("0"))
+
+        budget_rows = list_budgets(month=month, user=user, session=session)
+        alerts = [{"category": b["category"], "status": b["status"], "spent": b["spent"],
+                   "monthly_limit": b["monthly_limit"]} for b in budget_rows if b.get("status") in ("over", "near")]
+
+        return {
+            "month": month, "previous_month": prev,
+            "income": str(income), "expenses": str(expenses), "net": str(net),
+            "savings_rate": round(float(net / income * 100), 1) if income > 0 else None,
+            "previous_income": str(prev_income), "previous_expenses": str(prev_expenses),
+            "income_change": change(income, prev_income), "expenses_change": change(expenses, prev_expenses),
+            "average_expenses_3m": str(avg_3m.quantize(Decimal("0.01"))) if avg_3m is not None else None,
+            "categories": categories,
+            "top_merchants": [{"name": m["name"], "total": str(m["total"]), "count": m["count"]} for m in top_merchants],
+            "largest_expenses": [{"booked_on": t.booked_on.isoformat(), "description": t.description,
+                                  "amount": str(t.amount), "category": t.category} for t in largest],
+            "recurring": recurring[:8],
+            "trend": trend,
+            "uncategorised": {"count": len(uncategorised), "total": str(sum((-t.amount for t in uncategorised), Decimal("0")))},
+            "balances": sorted(balances, key=lambda b: (b["is_card"], b["account"])),
+            "bank_total": str(bank_total),
+            "budget_alerts": alerts,
+        }
+
     # ---- categories and rules ---------------------------------------------------
 
     @app.get("/api/categories")
@@ -643,7 +789,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_budgets(month: str | None = None, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
         if month is None:
             month = date.today().strftime("%Y-%m")
-        if not MONTH_RE.match(month):
+        if not _valid_month(month):
             raise HTTPException(status_code=422, detail="month must be YYYY-MM")
         year, mon = int(month[:4]), int(month[5:])
         start = date(year, mon, 1)
