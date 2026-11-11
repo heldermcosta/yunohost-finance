@@ -116,11 +116,9 @@ def _match_account(session: Session, account: Account | None, owner_accounts: li
         exact = [a for a in same_bank if a.account_ref_last4 == ref_last4]
         if len(exact) == 1:
             return exact[0]
-        unnamed = [a for a in same_bank if not a.account_ref_last4]
-        if not exact and len(unnamed) == 1:
-            unnamed[0].account_ref_last4 = ref_last4
-            session.flush()
-            return unnamed[0]
+        # Never assign a statement to an account without a number, even if it is
+        # the only one: it may belong to another account of the same bank. The
+        # person picks the account, and that choice records its number.
         # Only accounts that could take this statement are offered.
         compatible = [a.id for a in same_bank if not a.account_ref_last4]
         raise AccountNeeded(institution, compatible, _suggest(institution, ref_last4) if not compatible else None)
