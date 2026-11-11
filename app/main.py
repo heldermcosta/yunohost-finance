@@ -42,6 +42,7 @@ class AccountIn(BaseModel):
 
 
 class AccountPatch(BaseModel):
+    institution: str | None = Field(default=None, min_length=1, max_length=50)
     label: str | None = Field(default=None, min_length=1, max_length=120)
     account_ref_last4: str | None = Field(default=None, max_length=4)
     household: bool | None = None
@@ -232,6 +233,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def update_account(account_id: int, body: AccountPatch, user: User = Depends(get_current_user),
                        session: Session = Depends(get_session)) -> dict:
         account = account_for_owner(session, user, account_id)
+        if body.institution is not None:
+            account.institution = body.institution.strip().lower()
         if body.label is not None:
             account.label = body.label
         if body.account_ref_last4 is not None:
@@ -362,17 +365,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         detect_transfers(session, visible_ids(session, user))
         return {"id": statement.id, "status": statement.status}
 
+    @app.get("/api/statements")
+    def list_statements(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
+        ids = visible_ids(session, user)
+        labels = account_labels(session, user)
+        owners = {a.id: access.is_owner(user, a) for a in session.query(Account).filter(Account.id.in_(ids))}
+        counts = dict(session.query(Transaction.statement_id, func.count(Transaction.id))
+                      .filter(Transaction.account_id.in_(ids)).group_by(Transaction.statement_id).all())
+        rows = (session.query(Statement).filter(Statement.account_id.in_(ids))
+                .order_by(Statement.period_start.desc(), Statement.id.desc()).all())
+        return [
+            {"id": s.id, "account_id": s.account_id, "account": labels.get(s.account_id, ""),
+             "original_name": s.original_name, "status": s.status, "reconciliation": s.reconciliation,
+             "period": [s.period_start.isoformat(), s.period_end.isoformat()],
+             "transactions": counts.get(s.id, 0), "can_delete": owners.get(s.account_id, False)}
+            for s in rows
+        ]
+
     @app.delete("/api/statements/{statement_id}")
     def reject_statement(statement_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        """Delete a statement, its transactions and its PDF. Owner only, accepted or not.
+
+        Transfer links to transactions in other accounts are removed first, so the
+        partner is no longer counted as a transfer.
+        """
         statement = session.get(Statement, statement_id)
         if statement is None:
             raise HTTPException(status_code=404, detail="statement not found")
         account = account_for_read(session, user, statement.account_id)
         if not access.is_owner(user, account):
             raise HTTPException(status_code=403, detail="only the owner can delete a statement")
-        if statement.status == "accepted":
-            raise _err(409, "accepted", "Accepted statements are not deleted here.")
         pdf_path = settings.pdf_dir / statement.pdf_file
+        for t in session.query(Transaction).filter_by(statement_id=statement.id).all():
+            if t.is_transfer:
+                unlink(t, session)
+            session.delete(t)
         session.delete(statement)
         session.commit()
         pdf_path.unlink(missing_ok=True)
