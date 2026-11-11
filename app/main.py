@@ -73,12 +73,15 @@ class TransactionPatch(BaseModel):
     category: str | None = Field(default=None, min_length=1, max_length=60)
     is_transfer: bool | None = None
     description: str | None = Field(default=None, min_length=1, max_length=255)
+    object_name: str | None = Field(default=None, max_length=60)
 
 
 class BulkCategoryIn(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=2000)
     category: str = Field(min_length=1, max_length=60)
     save_rule: str | None = Field(default=None, min_length=2, max_length=120)
+    # None leaves the object unchanged; an empty string clears it.
+    object_name: str | None = Field(default=None, max_length=60)
 
 
 class RuleIn(BaseModel):
@@ -91,6 +94,7 @@ class BulkByTextIn(BaseModel):
     text: str = Field(min_length=2, max_length=120)
     category: str = Field(min_length=1, max_length=60)
     save_rule: bool = False
+    object_name: str | None = Field(default=None, max_length=60)
 
 
 class CategoryIn(BaseModel):
@@ -204,7 +208,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def user_rules(session: Session, user: User) -> list[tuple[str, str]]:
         rows = session.query(Rule).filter_by(owner_id=user.id).order_by(Rule.id.desc()).all()
-        return [(r.contains, r.category) for r in rows]
+        return [(r.contains, r.category, r.object_name) for r in rows]
 
     def ensure_category(session: Session, name: str) -> None:
         if session.query(Category).filter_by(name=name).first() is None:
@@ -220,7 +224,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "booked_on": t.booked_on.isoformat(), "description": t.description,
                 "amount": str(t.amount), "balance": str(t.balance), "category": t.category,
                 "category_source": t.category_source, "is_transfer": t.is_transfer,
-                "transfer_id": t.transfer_id}
+                "transfer_id": t.transfer_id, "object_name": t.object_name}
 
     def account_labels(session: Session, user: User) -> dict[int, str]:
         return {a.id: a.label for a in access.visible_accounts(session, user)}
@@ -503,6 +507,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_transactions(
         account_id: int | None = None, category: str | None = None,
         start: date | None = None, end: date | None = None, q: str | None = None,
+        object_name: str | None = None,
         transfers: str = "include", limit: int = 200, offset: int = 0,
         user: User = Depends(get_current_user), session: Session = Depends(get_session),
     ) -> dict:
@@ -517,6 +522,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             query = query.filter(Transaction.booked_on <= end)
         if q:
             query = query.filter(func.upper(Transaction.description).contains(q.upper()))
+        if object_name:
+            query = query.filter(Transaction.object_name == object_name)
         if transfers == "exclude":
             query = query.filter(Transaction.is_transfer.is_(False))
         elif transfers == "only":
@@ -525,6 +532,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rows = query.order_by(Transaction.booked_on.desc(), Transaction.id.desc()).offset(offset).limit(min(limit, 1000)).all()
         labels = account_labels(session, user)
         return {"total": total, "items": [serialise(t, labels) for t in rows]}
+
+    @app.get("/api/objects")
+    def list_objects(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[str]:
+        """Names already used as an object, from transactions the user can see and their rules."""
+        names = {r[0] for r in accepted_query(session, user).with_entities(Transaction.object_name)
+                 .filter(Transaction.object_name.isnot(None)).distinct().all()}
+        names |= {r[0] for r in session.query(Rule.object_name)
+                  .filter(Rule.owner_id == user.id, Rule.object_name.isnot(None)).distinct().all()}
+        return sorted(names, key=str.lower)
 
     @app.get("/api/transactions/{transaction_id}/similar")
     def similar_transactions(transaction_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
@@ -562,6 +578,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             set_category(session, user, t, body.category)
         if body.description is not None:
             t.description = body.description
+        if body.object_name is not None:
+            t.object_name = body.object_name.strip() or None
         if body.is_transfer is False and t.is_transfer:
             unlink(t, session)
         elif body.is_transfer is True:
@@ -576,10 +594,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             account = session.get(Account, t.account_id)
             if account is not None and access.can_access(session, user, account):
                 set_category(session, user, t, body.category)
+                if body.object_name is not None:
+                    t.object_name = body.object_name.strip() or None
                 updated += 1
         rule_id = None
         if body.save_rule:
-            rule_id = _upsert_rule(session, user, body.save_rule, body.category)
+            rule_id = _upsert_rule(session, user, body.save_rule, body.category,
+                                   (body.object_name or "").strip() or None)
         session.commit()
         return {"updated": updated, "rule_id": rule_id}
 
@@ -592,8 +613,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             account = session.get(Account, t.account_id)
             if account is not None and access.can_access(session, user, account):
                 set_category(session, user, t, body.category)
+                if body.object_name is not None:
+                    t.object_name = body.object_name.strip() or None
                 updated += 1
-        rule_id = _upsert_rule(session, user, text, body.category) if body.save_rule else None
+        rule_id = (_upsert_rule(session, user, text, body.category, (body.object_name or "").strip() or None)
+                   if body.save_rule else None)
         session.commit()
         return {"updated": updated, "rule_id": rule_id}
 
@@ -836,14 +860,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session.commit()
         return {"deleted": category_id}
 
-    def _upsert_rule(session: Session, user: User, contains: str, category: str) -> int:
+    def _upsert_rule(session: Session, user: User, contains: str, category: str,
+                     object_name: str | None = None) -> int:
         ensure_category(session, category)
         existing = session.query(Rule).filter(Rule.owner_id == user.id,
                                               func.upper(Rule.contains) == contains.upper()).first()
         if existing is not None:
             existing.category = category
+            if object_name is not None:
+                existing.object_name = object_name
             return existing.id
-        rule = Rule(owner_id=user.id, contains=contains, category=category)
+        rule = Rule(owner_id=user.id, contains=contains, category=category, object_name=object_name)
         session.add(rule)
         session.flush()
         return rule.id
@@ -851,7 +878,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/rules")
     def list_rules(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
         rows = session.query(Rule).filter_by(owner_id=user.id).order_by(Rule.id).all()
-        return [{"id": r.id, "contains": r.contains, "category": r.category} for r in rows]
+        return [{"id": r.id, "contains": r.contains, "category": r.category, "object_name": r.object_name}
+                for r in rows]
 
     @app.post("/api/rules", status_code=201)
     def add_rule(body: RuleIn, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:

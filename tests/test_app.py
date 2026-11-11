@@ -600,3 +600,39 @@ def test_duplicate_upload_names_the_earlier_copy_for_people_who_can_see_it(clien
 
     # Elsa cannot see Helder's account at all, so she gets no hint of its statements.
     assert upload(client, "elsa", account_id, pdf, name="copy.pdf").status_code == 404
+
+
+def test_object_is_set_in_bulk_filtered_and_listed(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 objects"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    items = client.get("/api/transactions?limit=1000", headers=as_user("helder")).json()["items"]
+    ids = [t["id"] for t in items][:2]
+
+    r = client.post("/api/transactions/bulk-category", headers=as_user("helder"),
+                    json={"ids": ids, "category": "Housing > Water", "object_name": "  House A "})
+    assert r.status_code == 200 and r.json()["updated"] == 2
+
+    listed = client.get("/api/transactions?object_name=House%20A", headers=as_user("helder")).json()
+    assert listed["total"] == 2
+    assert all(t["object_name"] == "House A" for t in listed["items"])
+    assert client.get("/api/objects", headers=as_user("helder")).json() == ["House A"]
+    assert client.get("/api/objects", headers=as_user("elsa")).json() == []
+
+    # An empty object clears it; leaving the field out keeps it.
+    client.post("/api/transactions/bulk-category", headers=as_user("helder"),
+                json={"ids": ids[:1], "category": "Housing > Water"})
+    assert client.get("/api/transactions?object_name=House%20A", headers=as_user("helder")).json()["total"] == 2
+    client.post("/api/transactions/bulk-category", headers=as_user("helder"),
+                json={"ids": ids[:1], "category": "Housing > Water", "object_name": ""})
+    assert client.get("/api/transactions?object_name=House%20A", headers=as_user("helder")).json()["total"] == 1
+
+
+def test_rule_object_is_taken_from_the_first_matching_rule():
+    from app.categories import rule_object
+
+    rules = [("DEGIRO", "Investing", "Portfolio"), ("LIDL", "Groceries", None)]
+    assert rule_object("PAG SERV DEGIRO", rules) == "Portfolio"
+    assert rule_object("LIDL SETUBAL", rules) is None
+    assert rule_object("CONTINENTE", rules) is None

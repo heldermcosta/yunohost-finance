@@ -13,6 +13,8 @@ ADDED_COLUMNS = [
     ("transactions", "category_source", "VARCHAR(10) NOT NULL DEFAULT 'default'"),
     ("transactions", "is_transfer", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("transactions", "transfer_id", "INTEGER"),
+    ("transactions", "object_name", "VARCHAR(60)"),
+    ("rules", "object_name", "VARCHAR(60)"),
     ("users", "ignored_terms", "TEXT NOT NULL DEFAULT ''"),
 ]
 
