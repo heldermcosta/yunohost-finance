@@ -230,14 +230,13 @@ details.cat summary { display: block; cursor: pointer; }
 .gl-key.ok { background: var(--ok-soft); border-color: var(--ok); }
 .gl-key.review { background: var(--warn-soft); border-color: var(--warn); }
 .gl-key.missing { background: var(--bad-soft); border: 1px dashed var(--bad); }
-.gl-key.out { background: transparent; border-style: dashed; }
-.gl-year { margin-top: 18px; }
+.gl-year { margin-top: 14px; }
 .gl-year h3 { margin: 0 0 8px; color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0; }
-.gl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.gl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
 .gl-cell {
-  min-height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--card-2);
-  padding: 8px 10px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;
-  font: inherit; color: var(--text); cursor: pointer; min-height: 64px;
+  min-height: 52px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--card-2);
+  padding: 6px 8px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;
+  font: inherit; color: var(--text); cursor: pointer;
 }
 .gl-cell:hover { border-color: var(--muted); }
 .gl-cell b { font-size: 13px; font-weight: 600; }
@@ -248,8 +247,6 @@ details.cat summary { display: block; cursor: pointer; }
 .gl-cell.review small { color: var(--warn); }
 .gl-cell.missing { background: var(--bad-soft); border: 1px dashed var(--bad); cursor: pointer; }
 .gl-cell.missing small { color: var(--bad); font-size: 16px; line-height: 1; font-weight: 700; }
-.gl-cell.out { background: transparent; border-style: dashed; color: var(--muted); cursor: default; opacity: .55; }
-.gl-cell.out:hover { border-color: var(--line); }
 
 /* Column chart */
 .chart { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px; }
@@ -1249,8 +1246,7 @@ let glRows = [];
 function applyGalleryText() {
   $("tab-btn-gallery").textContent = L("Gallery", "Galeria");
   $("gl-title").textContent = L("Statement gallery", "Galeria de extratos");
-  $("gl-intro").textContent = L("One account at a time, by year and month. Click a month to open its statement. A ✕ marks a month with no statement between the first and last one.",
-                                 "Uma conta de cada vez, por ano e mês. Clique num mês para abrir o extrato. Um ✕ marca um mês sem extrato entre o primeiro e o último.");
+  $("gl-intro").textContent = L("Click a month to open its statement.", "Clique num mês para abrir o extrato.");
   $("gl-account-label").textContent = L("Account", "Conta");
 }
 function glCoverage(rows) {
@@ -1282,10 +1278,7 @@ function renderGallery() {
   let missing = 0;
   const years = [];
   for (let y = Number(first.slice(0, 4)); y <= Number(last.slice(0, 4)); y++) years.push(y);
-  const legend = [
-    ["ok", L("Statement", "Extrato")], ["review", L("Waiting for review", "A aguardar revisão")],
-    ["missing", L("Missing", "Em falta")], ["out", L("Outside the range", "Fora do período")],
-  ];
+  const legend = [["ok", L("Accepted", "Aceite")], ["review", L("Review", "Revisão")], ["missing", L("Missing", "Em falta")]];
   $("gl-legend").replaceChildren(...legend.map(([cls, text]) => el("span", {}, [el("i", { class: "gl-key " + cls }), text])));
   const grid = years.map(y => {
     const cells = [];
@@ -1300,18 +1293,16 @@ function renderGallery() {
           [el("b", { text: label }), el("small", { text: s.status === "accepted" ? "✓ " + s.transactions : L("Review", "Revisão") })]));
       } else if (ym >= first && ym <= last) {
         missing++;
-        cells.push(el("button", { class: "gl-cell missing", type: "button", title: L("No statement for this month. Import it.", "Sem extrato neste mês. Importe-o."),
+        cells.push(el("button", { class: "gl-cell missing", type: "button", title: L("No statement. Import it.", "Sem extrato. Importe-o."),
           on: { click: () => showTab("import") } },
           [el("b", { text: label }), el("small", { text: "✕" })]));
-      } else {
-        cells.push(el("div", { class: "gl-cell out", "aria-hidden": "true" }, [el("b", { text: label })]));
       }
     }
     return el("div", { class: "gl-year" }, [el("h3", { text: String(y) }), el("div", { class: "gl-grid" }, cells)]);
   });
   const summary = el("p", { class: "muted", text: missing
-    ? L(`${missing} month(s) missing between ${monthLabel(first)} and ${monthLabel(last)}.`, `${missing} mês(es) em falta entre ${monthLabel(first)} e ${monthLabel(last)}.`)
-    : L(`No gaps between ${monthLabel(first)} and ${monthLabel(last)}.`, `Sem falhas entre ${monthLabel(first)} e ${monthLabel(last)}.`) });
+    ? L(`${missing} missing · ${monthLabel(first)} to ${monthLabel(last)}`, `${missing} em falta · ${monthLabel(first)} a ${monthLabel(last)}`)
+    : L(`No gaps · ${monthLabel(first)} to ${monthLabel(last)}`, `Sem falhas · ${monthLabel(first)} a ${monthLabel(last)}`) });
   $("gl-years").replaceChildren(summary, ...grid);
 }
 LOADERS.gallery = async () => {
