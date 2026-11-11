@@ -11,19 +11,21 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from . import access, crypto
+from . import access
 from .auth import username_from_authorization
 from .config import Settings
-from .ingest import DuplicateStatement, WrongInstitution, import_pdf, read_pdf
-from .models import Account, AccountShare, Base, Statement, Transaction, User
+from . import crypto
+from .ingest import DuplicateStatement, PasswordRequired, WrongInstitution, import_pdf, read_pdf
+from .models import Account, AccountShare, Base, PdfPassword, Statement, Transaction, User
 from .parsers import NoParserError
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class AccountIn(BaseModel):
@@ -39,6 +41,14 @@ class ShareIn(BaseModel):
 
 class ScopeIn(BaseModel):
     view_scope: str
+
+
+class PdfPasswordIn(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=1, max_length=200)
+
+
+PDF_PASSWORD_AAD = b"pdf-password"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -83,6 +93,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False)
+    def web_app() -> FileResponse:
+        # The page itself is public; every API call it makes is still checked by SSO.
+        return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
     @app.get("/api/me")
     def me(user: User = Depends(get_current_user)) -> dict:
@@ -131,10 +146,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session.commit()
         return {"shared_with": other.username}
 
+    def saved_passwords(session: Session, user: User) -> list[str]:
+        rows = session.query(PdfPassword).filter_by(owner_id=user.id).order_by(PdfPassword.id).all()
+        return [crypto.decrypt(key, r.sealed, PDF_PASSWORD_AAD).decode() for r in rows]
+
+    @app.get("/api/pdf-passwords")
+    def list_pdf_passwords(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
+        rows = session.query(PdfPassword).filter_by(owner_id=user.id).order_by(PdfPassword.id).all()
+        # Labels only. Passwords are never returned.
+        return [{"id": r.id, "label": r.label, "created_at": r.created_at.isoformat()} for r in rows]
+
+    @app.post("/api/pdf-passwords", status_code=201)
+    def add_pdf_password(body: PdfPasswordIn, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        row = PdfPassword(owner_id=user.id, label=body.label,
+                          sealed=crypto.encrypt(key, body.password.encode(), PDF_PASSWORD_AAD))
+        session.add(row)
+        session.commit()
+        return {"id": row.id, "label": row.label}
+
+    @app.delete("/api/pdf-passwords/{password_id}")
+    def delete_pdf_password(password_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        row = session.get(PdfPassword, password_id)
+        if row is None or row.owner_id != user.id:
+            raise HTTPException(status_code=404, detail="password not found")
+        session.delete(row)
+        session.commit()
+        return {"deleted": password_id}
+
     @app.post("/api/statements", status_code=201)
     async def upload_statement(
         account_id: int = Form(...),
         file: UploadFile = File(...),
+        pdf_password: str | None = Form(None),
         user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ) -> dict:
@@ -148,6 +191,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not data.startswith(b"%PDF"):
             raise HTTPException(status_code=422, detail="not a PDF file")
 
+        # The password sent with this upload is tried first, then the saved ones.
+        candidates = ([pdf_password] if pdf_password else []) + saved_passwords(session, user)
         try:
             result = import_pdf(
                 session,
@@ -155,7 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 original_name=file.filename or "statement.pdf",
                 account=account,
                 uploaded_by_id=user.id,
-                key=key,
+                password_candidates=candidates,
                 pdf_dir=settings.pdf_dir,
                 work_dir=settings.work_dir,
             )
@@ -165,7 +210,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc))
         except NoParserError:
             raise HTTPException(status_code=422, detail="no parser recognises this statement yet")
-        return asdict(result)
+        except PasswordRequired:
+            raise HTTPException(status_code=422, detail={
+                "code": "password_required",
+                "message": "This PDF is password protected. Enter its password and upload it again.",
+            })
+
+        reply = asdict(result)
+        used = reply.pop("pdf_password")
+        if used is not None and used not in candidates[1:]:
+            # A new password that worked is kept for future statements.
+            session.add(PdfPassword(owner_id=user.id, label=f"from {file.filename or 'statement'}"[:120],
+                                    sealed=crypto.encrypt(key, used.encode(), PDF_PASSWORD_AAD)))
+            session.commit()
+        return reply
 
     @app.get("/api/review")
     def review_queue(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:

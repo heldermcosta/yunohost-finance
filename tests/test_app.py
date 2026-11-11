@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app import crypto, ingest
 from app.config import Settings
+from app.parsers.pdftext import PdfPasswordError
 from app.main import create_app
 from tests.test_activobank import basic_statement
 
@@ -30,12 +31,21 @@ def settings(tmp_path):
     )
 
 
+class FakePdfs(dict):
+    """Maps fake PDF bytes to the statement text. `locks` maps protected PDFs to their password."""
+
+    def __init__(self):
+        super().__init__()
+        self.locks: dict[bytes, str] = {}
+
+
 @pytest.fixture
 def text_by_pdf(monkeypatch):
-    """Maps the fake PDF bytes to the statement text that extraction should return."""
-    texts: dict[bytes, str] = {}
+    texts = FakePdfs()
 
-    def fake_extract(pdf_bytes: bytes, work_dir):
+    def fake_extract(pdf_bytes: bytes, work_dir, password=None):
+        if pdf_bytes in texts.locks and password != texts.locks[pdf_bytes]:
+            raise PdfPasswordError("PDF is password protected")
         return texts[pdf_bytes]
 
     monkeypatch.setattr(ingest, "_pdf_to_text", fake_extract)
@@ -146,19 +156,61 @@ def test_non_pdf_upload_is_refused(client, text_by_pdf):
     assert r.status_code == 422
 
 
-def test_stored_pdf_is_encrypted_on_disk_and_reads_back(client, settings, text_by_pdf):
+def test_stored_pdf_is_kept_as_uploaded_and_reads_back(client, settings, text_by_pdf):
     account_id = make_account(client, "helder")
-    pdf = b"%PDF-1.4 secret-looking-bytes"
+    pdf = b"%PDF-1.4 plain-bytes"
     text_by_pdf[pdf] = basic_statement()
     statement_id = upload(client, "helder", account_id, pdf).json()["statement_id"]
 
-    stored = list(settings.pdf_dir.glob("*.bin"))
+    stored = list(settings.pdf_dir.glob("*.pdf"))
     assert len(stored) == 1
-    assert b"secret-looking-bytes" not in stored[0].read_bytes()
+    assert stored[0].read_bytes() == pdf
 
     back = client.get(f"/api/statements/{statement_id}/pdf", headers=as_user("helder"))
     assert back.status_code == 200
     assert back.content == pdf
+
+
+def test_protected_pdf_asks_for_password_then_remembers_it(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    locked = b"%PDF-1.4 locked-one"
+    text_by_pdf[locked] = basic_statement()
+    text_by_pdf.locks[locked] = "secret-1"
+
+    r = upload(client, "helder", account_id, locked)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "password_required"
+
+    wrong = client.post("/api/statements", headers=as_user("helder"),
+                        data={"account_id": str(account_id), "pdf_password": "nope"},
+                        files={"file": ("EXTRATO 1.pdf", locked, "application/pdf")})
+    assert wrong.status_code == 422
+
+    ok = client.post("/api/statements", headers=as_user("helder"),
+                     data={"account_id": str(account_id), "pdf_password": "secret-1"},
+                     files={"file": ("EXTRATO 1.pdf", locked, "application/pdf")})
+    assert ok.status_code == 201, ok.text
+    assert "pdf_password" not in ok.json()
+
+    saved = client.get("/api/pdf-passwords", headers=as_user("helder")).json()
+    assert len(saved) == 1
+    assert "secret-1" not in str(saved)  # labels only, never the password
+
+    other = b"%PDF-1.4 locked-two"
+    text_by_pdf[other] = basic_statement(closing_override="2 026.56")
+    text_by_pdf.locks[other] = "secret-1"
+    again = upload(client, "helder", account_id, other, name="EXTRATO 2.pdf")
+    assert again.status_code == 201, again.text
+    assert again.json()["status"] == "review"
+
+
+def test_saved_password_can_be_deleted_and_is_private_to_its_owner(client):
+    created = client.post("/api/pdf-passwords", headers=as_user("helder"),
+                          json={"label": "Cards", "password": "abc"}).json()
+    assert client.delete(f"/api/pdf-passwords/{created['id']}", headers=as_user("elsa")).status_code == 404
+    assert client.get("/api/pdf-passwords", headers=as_user("elsa")).json() == []
+    assert client.delete(f"/api/pdf-passwords/{created['id']}", headers=as_user("helder")).status_code == 200
+    assert client.get("/api/pdf-passwords", headers=as_user("helder")).json() == []
 
 
 # --- access ----------------------------------------------------------------
@@ -223,3 +275,10 @@ def test_csv_export_contains_only_accepted_rows(client, text_by_pdf):
     lines = r.text.strip().split("\n")
     assert lines[0].startswith("booked_on,account_id,description")
     assert len(lines) == 1 + 3  # header + the three transactions of the accepted statement
+
+
+def test_web_page_is_served(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "api/" in r.text
