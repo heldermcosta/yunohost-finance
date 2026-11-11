@@ -306,6 +306,26 @@ def test_statement_goes_to_the_account_with_matching_number(client, text_by_pdf)
     assert other not in {t["account_id"] for t in rows}
 
 
+def test_unnumbered_account_is_not_assigned_automatically(client, text_by_pdf):
+    # An account without a number must not absorb a statement of another account.
+    r = client.post("/api/accounts", headers=as_user("helder"),
+                    json={"institution": "ActivoBank", "label": "Unnumbered"})
+    assert r.status_code == 201, r.text
+    unnumbered = r.json()["id"]
+    pdf = b"%PDF-1.4 no-auto-assign"
+    text_by_pdf[pdf] = basic_statement()
+    r = client.post("/api/statements", headers=as_user("helder"),
+                    files={"file": ("EXTRATO.pdf", pdf, "application/pdf")})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "account_needed"
+    assert unnumbered in [a["id"] for a in detail["accounts"]]
+    rows = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
+    assert rows == []
+    accounts = client.get("/api/accounts", headers=as_user("helder")).json()
+    assert all(a["account_ref_last4"] in (None, "") for a in accounts if a["id"] == unnumbered)
+
+
 def test_statement_for_an_unknown_number_asks_for_an_account(client, text_by_pdf):
     _account(client, "helder", "9999", "Only other")
     pdf = b"%PDF-1.4 unknown-number"
