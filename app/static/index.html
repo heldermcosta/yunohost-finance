@@ -740,6 +740,9 @@ function setLanguage(l) {
 }
 let eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
 const money = (v) => eur.format(Number(v));
+// Sign convention everywhere: money coming in is positive, money leaving is negative.
+// Spending totals are stored as positive amounts, so they are shown negated.
+const outgoing = (v) => (Number(v) ? money(-Number(v)) : money(0));
 
 /* ---------- helpers ---------- */
 function el(tag, props = {}, children = []) {
@@ -952,13 +955,13 @@ async function renderInsights() {
   const months = data.period_months;
   $("ins-kpis").replaceChildren(
     kpi(L("Income", "Receitas"), money(income), pctChange(data.income_change)),
-    kpi(L("Spending", "Despesas"), money(expenses), pctChange(data.expenses_change)),
+    kpi(L("Spending", "Despesas"), outgoing(expenses), pctChange(data.expenses_change)),
     kpi(L("Net", "Saldo"), money(net), data.savings_rate !== null
       ? L("Savings rate ", "Taxa de poupança ") + data.savings_rate.toFixed(1) + "%"
       : L("No income in this period", "Sem receitas neste período")),
-    kpi(L("Spending per month", "Despesa por mês"), money(expenses / months),
+    kpi(L("Spending per month", "Despesa por mês"), outgoing(expenses / months),
       months > 1 ? L(`Average over ${months} months`, `Média de ${months} meses`) : null),
-    kpi(L("Uncategorised", "Sem categoria"), money(data.uncategorised.total),
+    kpi(L("Uncategorised", "Sem categoria"), outgoing(data.uncategorised.total),
       `${data.uncategorised.count} ${L("expenses", "despesas")}`),
   );
   const hadPrevious = Number(data.previous_income) !== 0 || Number(data.previous_expenses) !== 0;
@@ -973,12 +976,12 @@ async function renderInsights() {
     notes.push(L(`Spending is ${data.expenses_change > 0 ? "up" : "down"} ${Math.abs(data.expenses_change).toFixed(1)}% on the period before.`,
                  `A despesa ${data.expenses_change > 0 ? "subiu" : "desceu"} ${Math.abs(data.expenses_change).toFixed(1)}% em relação ao período anterior.`));
   for (const c of data.categories.filter(c => c.change !== null && c.change >= 25 && Number(c.total) >= 50).slice(0, 3))
-    notes.push(L(`${c.category} rose ${c.change.toFixed(1)}% on the period before (${money(c.total)}).`,
-                 `${c.category} subiu ${c.change.toFixed(1)}% em relação ao período anterior (${money(c.total)}).`));
+    notes.push(L(`${c.category} rose ${c.change.toFixed(1)}% on the period before (${outgoing(c.total)}).`,
+                 `${c.category} subiu ${c.change.toFixed(1)}% em relação ao período anterior (${outgoing(c.total)}).`));
   if (data.categories.length) {
     const top = data.categories[0];
-    notes.push(L(`Largest category: ${top.category}, ${money(top.total)} (${top.share}% of spending).`,
-                 `Categoria principal: ${top.category}, ${money(top.total)} (${top.share}% da despesa).`));
+    notes.push(L(`Largest category: ${top.category}, ${outgoing(top.total)} (${top.share}% of spending).`,
+                 `Categoria principal: ${top.category}, ${outgoing(top.total)} (${top.share}% da despesa).`));
   }
   if (data.uncategorised.count) notes.push(L(`${data.uncategorised.count} expenses have no category yet. Use the Transactions tab to fix them.`,
                                               `${data.uncategorised.count} despesas ainda não têm categoria. Use o separador Movimentos para as corrigir.`));
@@ -994,30 +997,30 @@ async function renderInsights() {
   }));
   const maxBucket = Math.max(1, ...buckets.map(b => Number(b.expenses)));
   const showValues = buckets.length <= 8;
-  $("ov-chart").replaceChildren(...buckets.map(b => el("div", { class: "col", title: `${b.title}: ${money(b.expenses)}` }, [
-    showValues ? el("b", { text: Number(b.expenses) ? money(b.expenses) : "" }) : null,
+  $("ov-chart").replaceChildren(...buckets.map(b => el("div", { class: "col", title: `${b.title}: ${outgoing(b.expenses)}` }, [
+    showValues ? el("b", { text: Number(b.expenses) ? outgoing(b.expenses) : "" }) : null,
     el("i", { style: `height:${(Number(b.expenses) / maxBucket * 100).toFixed(1)}%` }),
     el("span", { text: b.label }),
   ])));
   $("ins-months").replaceChildren(simpleTable(
     [byYear ? L("Year", "Ano") : L("Month", "Mês"), L("Income", "Receitas"), L("Spending", "Despesas"), L("Net", "Saldo")],
-    [...buckets.map(b => [byYear ? b.label : b.title, money(b.income), money(b.expenses), money(b.net)]),
-     [L("Total", "Total"), money(income), money(expenses), money(net)]]));
+    [...buckets.map(b => [byYear ? b.label : b.title, money(b.income), outgoing(b.expenses), money(b.net)]),
+     [L("Total", "Total"), money(income), outgoing(expenses), money(net)]]));
 
   // Categories, each with its subcategories inside (collapsed until opened).
   $("ins-cats").replaceChildren(...(data.categories.length ? data.categories.map(c => el("details", { class: "cat" }, [
     el("summary", {}, [
-      el("span", { text: `${c.category} — ${money(c.total)} · ${c.share}% · ${pctChange(c.change)}` }),
+      el("span", { text: `${c.category} — ${outgoing(c.total)} · ${c.share}% · ${pctChange(c.change)}` }),
       el("div", { class: "share-bar" }, [el("i", { style: `width:${c.share}%` })]),
     ]),
     c.children.length
-      ? el("ul", {}, c.children.map(ch => el("li", { text: `${ch.category.slice(c.category.length + 3)} — ${money(ch.total)}` })))
+      ? el("ul", {}, c.children.map(ch => el("li", { text: `${ch.category.slice(c.category.length + 3)} — ${outgoing(ch.total)}` })))
       : el("p", { class: "muted", text: L("No subcategories used.", "Sem subcategorias usadas.") }),
   ])) : [el("p", { class: "muted", text: L("No spending in this period.", "Sem despesas neste período.") })]));
 
   $("ins-merchants").replaceChildren(simpleTable(
     [L("Merchant", "Comerciante"), L("Count", "Nº"), L("€ Total", "€ Total")],
-    data.top_merchants.map(m => [m.name, String(m.count), money(m.total)])));
+    data.top_merchants.map(m => [m.name, String(m.count), outgoing(m.total)])));
 
   $("ins-largest").replaceChildren(simpleTable(
     [L("Date", "Data"), L("Description", "Descrição"), L("€ Amount", "€ Valor"), L("Category", "Categoria")],
@@ -1025,9 +1028,9 @@ async function renderInsights() {
 
   $("ins-recurring").replaceChildren(simpleTable(
     [L("Merchant", "Comerciante"), L("Months (last 6)", "Meses (últimos 6)"), L("€ Average", "€ Média")],
-    data.recurring.map(r => [r.name, String(r.months), money(r.average)])));
+    data.recurring.map(r => [r.name, String(r.months), outgoing(r.average)])));
 
-  const balanceRows = data.balances.map(b => [b.account, b.is_card ? L("owed", "em dívida") : L("balance", "saldo"), money(b.closing_balance), b.as_of]);
+  const balanceRows = data.balances.map(b => [b.account, b.is_card ? L("owed", "em dívida") : L("balance", "saldo"), (b.is_card ? outgoing(b.closing_balance) : money(b.closing_balance)), b.as_of]);
   $("ins-balances").replaceChildren(
     simpleTable([L("Account", "Conta"), L("Kind", "Tipo"), L("€ Amount", "€ Valor"), L("As of", "Data")], balanceRows),
     el("p", { class: "muted", text: L(`Bank balances together: ${money(data.bank_total)} (cards are shown as amounts owed and are not added).`,
@@ -1174,7 +1177,7 @@ async function loadBudgets() {
     const status = b.status === "over" ? t("budget_over") : b.status === "near" ? t("budget_near") : "";
     return el("div", { style: "margin:10px 0" }, [
       el("div", { class: "toolbar", style: "justify-content:space-between" }, [
-        el("span", {}, [el("b", { text: b.category }), " ", el("span", { class: "muted", text: t("budget_spent", { spent: money(b.spent), limit: money(b.monthly_limit) }) }), status ? el("span", { class: b.status === "over" ? "neg" : "muted", text: "  · " + status }) : null]),
+        el("span", {}, [el("b", { text: b.category }), " ", el("span", { class: "muted", text: t("budget_spent", { spent: outgoing(b.spent), limit: outgoing(b.monthly_limit) }) }), status ? el("span", { class: b.status === "over" ? "neg" : "muted", text: "  · " + status }) : null]),
         el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
           if (!(await confirmBox(t("delete_confirm")))) return;
           try { await api("budgets/" + b.id, { method: "DELETE" }); loadBudgets(); } catch (e) { toast("error", errorText(e)); }
@@ -1364,8 +1367,8 @@ LOADERS.transactions = async () => {
   const inflow = data.items.reduce((sum, t) => sum + (Number(t.amount) > 0 ? Number(t.amount) : 0), 0);
   const outflow = data.items.reduce((sum, t) => sum + (Number(t.amount) < 0 ? -Number(t.amount) : 0), 0);
   $("tx-count").textContent = (lang === "pt"
-    ? `${txTotal} movimentos · entradas ${money(inflow)} · saídas ${money(outflow)}`
-    : `${txTotal} transactions · in ${money(inflow)} · out ${money(outflow)}`);
+    ? `${txTotal} movimentos · entradas ${money(inflow)} · saídas ${outgoing(outflow)}`
+    : `${txTotal} transactions · in ${money(inflow)} · out ${outgoing(outflow)}`);
   $("tx-bulk-cat").replaceChildren(...cache.categories.map(c => el("option", { value: c, text: c })));
   updateBulkBar();
   if (!data.items.length) { $("tx-table").replaceChildren(el("p", { class: "muted", text: t("no_transactions") })); return; }
