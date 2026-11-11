@@ -223,3 +223,10 @@ def test_csv_export_contains_only_accepted_rows(client, text_by_pdf):
     lines = r.text.strip().split("\n")
     assert lines[0].startswith("booked_on,account_id,description")
     assert len(lines) == 1 + 3  # header + the three transactions of the accepted statement
+
+
+def test_web_page_is_served(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "api/" in r.text

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finance</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
+  --line: #e3e6ec; --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --card: #1a1f27; --text: #e6e9ef; --muted: #9aa3b2;
+    --line: #2a313c; --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --card: #1a1f27; --text: #e6e9ef; --muted: #9aa3b2;
+  --line: #2a313c; --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { background: none; border: 1px solid transparent; color: var(--muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+nav button.active { color: var(--accent); border-color: var(--line); background: var(--bg); }
+main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+section { display: none; }
+section.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+input, select, button.primary, button.secondary, button.danger { font: inherit; border-radius: 6px; padding: 7px 10px; }
+input, select { width: 100%; max-width: 360px; background: var(--card); color: var(--text); border: 1px solid var(--line); }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+button.danger { background: var(--card); color: var(--bad); border: 1px solid var(--line); }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.row > div { flex: 1 1 160px; }
+.row > div.wide { flex: 2 1 240px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.desc { white-space: normal; min-width: 180px; }
+tr.total td { font-weight: 700; }
+.muted { color: var(--muted); font-size: 13px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+.pill.ok { color: var(--ok); } .pill.warning { color: var(--warn); } .pill.failed { color: var(--bad); }
+.neg { color: var(--bad); } .pos { color: var(--ok); }
+#msg { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--card); padding: 8px 14px; border-radius: 8px; display: none; max-width: 90vw; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 600px) { main { padding: 12px; } th, td { padding: 6px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Finance</h1>
+  <nav id="tabs">
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="transactions">Transactions</button>
+    <button data-tab="upload">Upload</button>
+    <button data-tab="review">Review <span id="review-count" class="muted"></span></button>
+    <button data-tab="accounts">Accounts</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+<main>
+
+<section id="tab-overview" class="active">
+  <div class="card">
+    <div class="row">
+      <div><label for="ov-year">Year</label><select id="ov-year"></select></div>
+      <div class="muted" id="ov-note"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Monthly spending by category</h2>
+    <div class="table-wrap" id="ov-table"></div>
+  </div>
+  <div class="card">
+    <h2>Income by month</h2>
+    <div class="table-wrap" id="ov-income"></div>
+  </div>
+</section>
+
+<section id="tab-transactions">
+  <div class="card">
+    <div class="row">
+      <div><label for="tx-account">Account</label><select id="tx-account"></select></div>
+      <div><label for="tx-category">Category</label><select id="tx-category"></select></div>
+      <div><label for="tx-start">From</label><input type="date" id="tx-start"></div>
+      <div><label for="tx-end">To</label><input type="date" id="tx-end"></div>
+      <div><button class="primary" id="tx-apply">Apply</button></div>
+      <div><button class="secondary" id="tx-csv">Export CSV</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="muted" id="tx-count"></div>
+    <div class="table-wrap" id="tx-table"></div>
+  </div>
+</section>
+
+<section id="tab-upload">
+  <div class="card">
+    <h2>Import a statement</h2>
+    <p class="muted">The PDF is checked and reconciled. Statements that do not reconcile go to the review queue and stay out of the analytics until accepted.</p>
+    <div class="row">
+      <div class="wide"><label for="up-account">Account</label><select id="up-account"></select></div>
+    </div>
+    <label for="up-file">PDF statement</label>
+    <input type="file" id="up-file" accept="application/pdf">
+    <div style="margin-top:12px"><button class="primary" id="up-go">Import</button></div>
+    <div id="up-result" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<section id="tab-review">
+  <div class="card">
+    <h2>Statements waiting for review</h2>
+    <div class="table-wrap" id="rv-table"></div>
+  </div>
+</section>
+
+<section id="tab-accounts">
+  <div class="card">
+    <h2>Accounts</h2>
+    <div class="table-wrap" id="ac-table"></div>
+  </div>
+  <div class="card">
+    <h2>New account</h2>
+    <div class="row">
+      <div><label for="ac-institution">Institution</label><input id="ac-institution" placeholder="activobank"></div>
+      <div class="wide"><label for="ac-label">Label</label><input id="ac-label" placeholder="ActivoBank Helder"></div>
+      <div><label for="ac-last4">Last 4 digits</label><input id="ac-last4" maxlength="4"></div>
+      <div><button class="primary" id="ac-create">Create</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Share an account you own</h2>
+    <div class="row">
+      <div><label for="sh-account">Account</label><select id="sh-account"></select></div>
+      <div><label for="sh-user">Username</label><input id="sh-user" placeholder="elsa"></div>
+      <div><button class="primary" id="sh-go">Share</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="tab-settings">
+  <div class="card">
+    <h2>Who you see</h2>
+    <div class="row">
+      <div class="wide">
+        <label for="st-scope">View scope</label>
+        <select id="st-scope">
+          <option value="own_shared">Own and shared accounts</option>
+          <option value="all">All accounts</option>
+        </select>
+      </div>
+      <div><button class="primary" id="st-save">Save</button></div>
+    </div>
+    <p class="muted">Signed in as <span id="st-user"></span>.</p>
+  </div>
+</section>
+
+</main>
+<div id="msg"></div>
+
+<script>
+"use strict";
+const API = "api/";  // relative, so it works under /finance/ behind the proxy
+const state = { me: null, accounts: [], categories: [] };
+const eur = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" });
+const fmt = (s) => eur.format(Number(s));
+
+function el(tag, props = {}, children = []) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else n.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) n.append(c);
+  return n;
+}
+
+function toast(text) {
+  const m = document.getElementById("msg");
+  m.textContent = text; m.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => (m.style.display = "none"), 3500);
+}
+
+async function api(path, opts = {}) {
+  const init = { credentials: "same-origin", ...opts, headers: { ...(opts.headers || {}) } };
+  if (opts.json !== undefined) {
+    init.body = JSON.stringify(opts.json);
+    init.headers["Content-Type"] = "application/json";
+    delete init.json;
+  }
+  const r = await fetch(API + path, init);
+  let body = null;
+  const type = r.headers.get("content-type") || "";
+  if (type.includes("application/json")) body = await r.json();
+  if (!r.ok) {
+    const detail = body && body.detail;
+    const text = typeof detail === "string" ? detail : (r.status === 401 ? "Not signed in" : `Error ${r.status}`);
+    throw new Error(text);
+  }
+  return body;
+}
+
+function showTab(name) {
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("main > section").forEach(s => s.classList.toggle("active", s.id === "tab-" + name));
+  const loaders = { overview: loadOverview, transactions: loadTransactions, review: loadReview, accounts: loadAccounts, upload: loadAccounts, settings: loadSettings };
+  if (loaders[name]) loaders[name]().catch(e => toast(e.message));
+}
+
+document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+async function loadAccountsCache() {
+  state.accounts = await api("accounts");
+  const options = state.accounts.map(a => el("option", { value: a.id, text: `${a.label} (${a.institution})${a.is_owner ? "" : " · shared by " + a.owner}` }));
+  for (const id of ["tx-account", "up-account", "sh-account"]) {
+    const sel = document.getElementById(id);
+    const keep = sel.value;
+    sel.replaceChildren(...(id === "tx-account" ? [el("option", { value: "", text: "All accounts" })] : []), ...options.map(o => o.cloneNode(true)));
+    if (keep) sel.value = keep;
+  }
+}
+
+async function loadCategories() {
+  const rows = await api("transactions");
+  const cats = [...new Set(rows.map(r => r.category))].sort();
+  state.categories = cats;
+  const sel = document.getElementById("tx-category");
+  sel.replaceChildren(el("option", { value: "", text: "All categories" }), ...cats.map(c => el("option", { value: c, text: c })));
+}
+
+async function loadOverview() {
+  await loadAccountsCache();
+  const rows = await api("summary/monthly");
+  const years = [...new Set(rows.map(r => r.month.slice(0, 4)))].sort().reverse();
+  const yearSel = document.getElementById("ov-year");
+  const current = yearSel.value || String(new Date().getFullYear());
+  const yearList = years.length ? years : [current];
+  yearSel.replaceChildren(...yearList.map(y => el("option", { value: y, text: y })));
+  yearSel.value = yearList.includes(current) ? current : yearList[0];
+  const year = yearSel.value;
+  const inYear = rows.filter(r => r.month.startsWith(year));
+
+  const months = [...new Set(inYear.map(r => r.month))].sort();
+  const cats = [...new Set(inYear.map(r => r.category))].sort();
+  const cell = (m, c) => {
+    const r = inYear.find(x => x.month === m && x.category === c);
+    return r ? Number(r.expenses) : 0;
+  };
+  const monthTotals = months.map(m => inYear.filter(r => r.month === m).reduce((s, r) => s + Number(r.expenses), 0));
+  const head = el("tr", {}, [el("th", { text: "Category" }), ...months.map(m => el("th", { class: "num", text: m.slice(5) + "/" + m.slice(2, 4) })), el("th", { class: "num", text: "Total" })]);
+  const body = cats.map(c => {
+    const vals = months.map(m => cell(m, c));
+    const total = vals.reduce((a, b) => a + b, 0);
+    return el("tr", {}, [el("td", { text: c }), ...vals.map(v => el("td", { class: "num", text: v ? eur.format(v) : "–" })), el("td", { class: "num", text: eur.format(total) })]);
+  });
+  const totalRow = el("tr", { class: "total" }, [el("td", { text: "Total" }), ...monthTotals.map(v => el("td", { class: "num", text: eur.format(v) })), el("td", { class: "num", text: eur.format(monthTotals.reduce((a, b) => a + b, 0)) })]);
+  const table = el("table", {}, [el("thead", {}, head), el("tbody", {}, [...body, ...(cats.length ? [totalRow] : [])])]);
+  document.getElementById("ov-table").replaceChildren(months.length ? table : el("p", { class: "muted", text: "No accepted statements for this year yet." }));
+  document.getElementById("ov-note").textContent = "Expenses only, accepted statements. Reviewed statements are not counted.";
+
+  const incomeRows = months.map(m => {
+    const v = inYear.filter(r => r.month === m).reduce((s, r) => s + Number(r.income), 0);
+    return el("tr", {}, [el("td", { text: m }), el("td", { class: "num pos", text: eur.format(v) })]);
+  });
+  document.getElementById("ov-income").replaceChildren(incomeRows.length
+    ? el("table", {}, [el("thead", {}, el("tr", {}, [el("th", { text: "Month" }), el("th", { class: "num", text: "Income" })])), el("tbody", {}, incomeRows)])
+    : el("p", { class: "muted", text: "No income recorded." }));
+}
+document.getElementById("ov-year").addEventListener("change", () => loadOverview().catch(e => toast(e.message)));
+
+async function loadTransactions() {
+  await loadAccountsCache();
+  await loadCategories();
+  const params = new URLSearchParams();
+  const acc = document.getElementById("tx-account").value;
+  const cat = document.getElementById("tx-category").value;
+  const start = document.getElementById("tx-start").value;
+  const end = document.getElementById("tx-end").value;
+  if (acc) params.set("account_id", acc);
+  if (cat) params.set("category", cat);
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const rows = await api("transactions?" + params.toString());
+  document.getElementById("tx-count").textContent = `${rows.length} transactions`;
+  if (!rows.length) {
+    document.getElementById("tx-table").replaceChildren(el("p", { class: "muted", text: "No transactions match." }));
+    return;
+  }
+  const accLabel = Object.fromEntries(state.accounts.map(a => [a.id, a.label]));
+  const body = rows.map(t => {
+    const amt = Number(t.amount);
+    return el("tr", {}, [
+      el("td", { text: t.booked_on }),
+      el("td", { class: "desc", text: t.description }),
+      el("td", { text: t.category }),
+      el("td", { text: accLabel[t.account_id] || String(t.account_id) }),
+      el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
+    ]);
+  });
+  document.getElementById("tx-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, ["Date", "Description", "Category", "Account", "Amount"].map((h, i) => el("th", { class: i === 4 ? "num" : "", text: h })))),
+    el("tbody", {}, body),
+  ]));
+}
+["tx-account", "tx-category", "tx-start", "tx-end"].forEach(id => document.getElementById(id).addEventListener("change", () => loadTransactions().catch(e => toast(e.message))));
+document.getElementById("tx-apply").addEventListener("click", () => loadTransactions().catch(e => toast(e.message)));
+document.getElementById("tx-csv").addEventListener("click", async () => {
+  try {
+    const r = await fetch(API + "export/transactions.csv", { credentials: "same-origin" });
+    if (!r.ok) throw new Error(`Error ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    const a = el("a", { href: url, download: "transactions.csv" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { toast(e.message); }
+});
+
+document.getElementById("up-go").addEventListener("click", async () => {
+  const file = document.getElementById("up-file").files[0];
+  const account = document.getElementById("up-account").value;
+  const out = document.getElementById("up-result");
+  if (!file || !account) { toast("Choose an account and a PDF"); return; }
+  const btn = document.getElementById("up-go");
+  btn.disabled = true; out.textContent = "Importing…";
+  try {
+    const form = new FormData();
+    form.append("account_id", account);
+    form.append("file", file, file.name);
+    const res = await api("statements", { method: "POST", body: form });
+    const cls = res.status === "accepted" ? "ok" : "warning";
+    out.replaceChildren(
+      el("span", { class: "pill " + cls, text: res.status === "accepted" ? "Accepted" : "Needs review" }),
+      el("span", { class: "muted", text: `  ${res.transaction_count} transactions · reconciliation ${res.reconciliation} · difference ${res.difference}` }),
+    );
+    if (res.notes && res.notes.length) out.append(el("ul", { class: "muted" }, res.notes.map(n => el("li", { text: n }))));
+    document.getElementById("up-file").value = "";
+  } catch (e) {
+    out.replaceChildren(el("span", { class: "neg", text: e.message }));
+  } finally { btn.disabled = false; }
+});
+
+async function loadReview() {
+  const rows = await api("review");
+  document.getElementById("review-count").textContent = rows.length ? `(${rows.length})` : "";
+  const accLabel = await accountLabels();
+  if (!rows.length) {
+    document.getElementById("rv-table").replaceChildren(el("p", { class: "muted", text: "Nothing waiting for review." }));
+    return;
+  }
+  const body = rows.map(s => {
+    const accept = el("button", { class: "primary", text: "Accept" });
+    const reject = el("button", { class: "danger", text: "Delete" });
+    accept.addEventListener("click", async () => {
+      try { await api(`statements/${s.id}/accept`, { method: "POST" }); toast("Accepted"); loadReview(); }
+      catch (e) { toast(e.message); }
+    });
+    reject.addEventListener("click", async () => {
+      if (!confirm("Delete this statement and its PDF?")) return;
+      try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("Deleted"); loadReview(); }
+      catch (e) { toast(e.message); }
+    });
+    return el("tr", {}, [
+      el("td", { text: accLabel[s.account_id] || String(s.account_id) }),
+      el("td", { class: "desc", text: s.original_name }),
+      el("td", { text: s.period.join(" → ") }),
+      el("td", {}, el("span", { class: "pill " + s.reconciliation, text: s.reconciliation })),
+      el("td", { class: "desc muted", text: s.notes.join("; ") }),
+      el("td", {}, el("div", { class: "actions" }, [accept, reject])),
+    ]);
+  });
+  document.getElementById("rv-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, ["Account", "File", "Period", "Check", "Notes", ""].map(h => el("th", { text: h })))),
+    el("tbody", {}, body),
+  ]));
+}
+
+async function accountLabels() {
+  if (!state.accounts.length) state.accounts = await api("accounts");
+  return Object.fromEntries(state.accounts.map(a => [a.id, a.label]));
+}
+
+async function loadAccounts() {
+  await loadAccountsCache();
+  if (!state.accounts.length) {
+    document.getElementById("ac-table").replaceChildren(el("p", { class: "muted", text: "No accounts yet. Create one below." }));
+    return;
+  }
+  const body = state.accounts.map(a => el("tr", {}, [
+    el("td", { text: a.label }), el("td", { text: a.institution }),
+    el("td", { text: a.account_ref_last4 ? "•••• " + a.account_ref_last4 : "" }),
+    el("td", { text: a.currency }), el("td", { text: a.is_owner ? "You" : "Shared by " + a.owner }),
+  ]));
+  document.getElementById("ac-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, ["Label", "Institution", "Card / account", "Currency", "Owner"].map(h => el("th", { text: h })))),
+    el("tbody", {}, body),
+  ]));
+}
+
+document.getElementById("ac-create").addEventListener("click", async () => {
+  const body = {
+    institution: document.getElementById("ac-institution").value.trim().toLowerCase(),
+    label: document.getElementById("ac-label").value.trim(),
+    account_ref_last4: document.getElementById("ac-last4").value.trim(),
+  };
+  if (!body.institution || !body.label) { toast("Institution and label are required"); return; }
+  try {
+    await api("accounts", { method: "POST", json: body });
+    toast("Account created");
+    ["ac-institution", "ac-label", "ac-last4"].forEach(id => (document.getElementById(id).value = ""));
+    loadAccounts();
+  } catch (e) { toast(e.message); }
+});
+
+document.getElementById("sh-go").addEventListener("click", async () => {
+  const id = document.getElementById("sh-account").value;
+  const username = document.getElementById("sh-user").value.trim();
+  if (!id || !username) { toast("Choose an account and a username"); return; }
+  try {
+    await api(`accounts/${id}/shares`, { method: "POST", json: { username } });
+    toast(`Shared with ${username}`);
+    document.getElementById("sh-user").value = "";
+  } catch (e) { toast(e.message); }
+});
+
+async function loadSettings() {
+  state.me = await api("me");
+  document.getElementById("st-user").textContent = state.me.username;
+  document.getElementById("st-scope").value = state.me.view_scope;
+}
+document.getElementById("st-save").addEventListener("click", async () => {
+  try {
+    await api("me/scope", { method: "PUT", json: { view_scope: document.getElementById("st-scope").value } });
+    toast("Saved");
+  } catch (e) { toast(e.message); }
+});
+
+(async () => {
+  try {
+    await loadAccountsCache();
+    await loadOverview();
+    await loadReview().catch(() => {});
+  } catch (e) { toast(e.message); }
+})();
+</script>
+</body>
+</html>

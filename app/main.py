@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -24,6 +24,7 @@ from .models import Account, AccountShare, Base, Statement, Transaction, User
 from .parsers import NoParserError
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class AccountIn(BaseModel):
@@ -83,6 +84,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False)
+    def web_app() -> FileResponse:
+        # The page itself is public; every API call it makes is still checked by SSO.
+        return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
     @app.get("/api/me")
     def me(user: User = Depends(get_current_user)) -> dict:
