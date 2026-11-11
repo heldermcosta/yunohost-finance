@@ -167,6 +167,13 @@ tr.total:hover td { background: var(--card-2); }
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent));
 }
 .chart .col span { font-size: 11px; color: var(--muted); margin-top: 6px; white-space: nowrap; }
+.chart .col b { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chart .col i { opacity: .55; }
+.chart .col.selected i { opacity: 1; }
+.chart .col.selected span { color: var(--accent); font-weight: 700; }
+.empty { text-align: center; padding: 22px 12px; color: var(--text); }
+.empty strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.empty p { margin: 0 auto 12px; max-width: 46ch; }
 
 /* KPI tiles */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0 4px; }
@@ -746,6 +753,15 @@ async function loadYears(sel, current) {
 const L = (en, pt) => (lang === "pt" ? pt : en);
 const pctChange = (v) => v === null || v === undefined ? L("no previous month", "sem mês anterior") : `${v > 0 ? "+" : ""}${v.toFixed(1)}% ${L("vs last month", "vs mês anterior")}`;
 
+// A friendly empty state with one clear next step. Optional button opens the Import tab.
+function emptyState(title, text, buttonText) {
+  return el("div", { class: "empty" }, [
+    el("strong", { text: title }),
+    el("p", { class: "muted", text }),
+    buttonText ? el("button", { class: "primary small", type: "button", text: buttonText, on: { click: () => showTab("import") } }) : null,
+  ]);
+}
+
 function simpleTable(headers, rows) {
   if (!rows.length) return el("p", { class: "muted", text: L("Nothing to show.", "Nada para mostrar.") });
   return el("table", {}, [
@@ -758,7 +774,11 @@ async function renderInsights() {
   const picked = $("ov-month").value;
   const data = await api("insights" + (picked ? "?month=" + picked : ""));
   if (!data.month) {
-    $("ins-kpis").replaceChildren(el("p", { class: "muted", text: L("No accepted statements yet.", "Ainda não há extratos aceites.") }));
+    $("ins-kpis").replaceChildren(emptyState(
+      L("Nothing to show yet", "Ainda não há nada para mostrar"),
+      L("Import a bank or card statement and accept it. Its numbers will appear here.",
+        "Importe um extrato bancário ou de cartão e aceite-o. Os valores aparecerão aqui."),
+      L("Import statements", "Importar extratos")));
     for (const id of ["ins-notes", "ins-cats", "ins-trend", "ins-merchants", "ins-recurring", "ins-largest", "ins-balances"]) $(id).replaceChildren();
     return;
   }
@@ -845,13 +865,19 @@ LOADERS.overview = async () => {
   const monthTotal = (m) => rows.filter(r => r.month === m).reduce((s, r) => s + Number(r.expenses), 0);
 
   const max = Math.max(1, ...months.map(monthTotal));
-  $("ov-chart").replaceChildren(...(months.length ? months.map(m => el("div", { class: "col", title: `${m}: ${money(monthTotal(m))}` }, [
+  const picked = $("ov-month").value;
+  $("ov-chart").replaceChildren(...(months.length ? months.map(m => el("div", { class: "col" + (m === picked ? " selected" : ""), title: `${m}: ${money(monthTotal(m))}` }, [
+    el("b", { text: monthTotal(m) ? money(monthTotal(m)) : "" }),
     el("i", { style: `height:${(monthTotal(m) / max * 100).toFixed(1)}%` }),
     el("span", { text: m.slice(5) }),
-  ])) : [el("p", { class: "muted", text: lang === "pt" ? "Sem dados para este ano." : "No data for this year." })]));
+  ])) : [emptyState(L("No spending recorded in " + year, "Sem despesas registadas em " + year),
+                     L("Accepted statements for this year will show their monthly totals here.",
+                       "Os extratos aceites deste ano mostram aqui os totais mensais."), L("Import statements", "Importar extratos"))]));
 
   if (!months.length) {
-    $("ov-table").replaceChildren(el("p", { class: "muted", text: lang === "pt" ? "Sem extratos aceites neste ano." : "No accepted statements for this year." }));
+    $("ov-table").replaceChildren(emptyState(L("No categories yet", "Ainda sem categorias"),
+      L("Once statements are accepted, spending by category appears here.",
+        "Depois de aceitar extratos, a despesa por categoria aparece aqui."), L("Import statements", "Importar extratos")));
   } else {
     const head = el("tr", {}, [el("th", { text: t("category") }), ...months.map(m => el("th", { class: "num", text: m.slice(5) + "/" + m.slice(2, 4) })), el("th", { class: "num", text: lang === "pt" ? "Total" : "Total" })]);
     const body = cats.map(c => {
