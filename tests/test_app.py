@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import base64
 import os
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import crypto, ingest
+from app.categories import SEPARATOR
 from app.config import Settings
 from app.parsers.pdftext import PdfPasswordError
 from app.main import create_app
 from tests.test_activobank import basic_statement
+from app.categories import SEPARATOR
 
 
 @pytest.fixture
@@ -111,7 +114,7 @@ def test_clean_statement_is_accepted_and_counts_in_summary(client, text_by_pdf):
 
     summary = client.get("/api/summary/monthly", headers=as_user("helder")).json()
     expenses = {row["category"]: row["expenses"] for row in summary}
-    assert expenses["Groceries"] == "123.45"
+    assert expenses["Groceries > Supermarket"] == "123.45"
     assert expenses["Uncategorised"] == "50.00"  # "PAG SERV EXEMPLO" matches no rule
 
 
@@ -463,3 +466,33 @@ def test_bulk_category_by_text_updates_matching_rows_and_can_save_a_rule(client,
     assert r.json()["updated"] >= 1 and r.json()["rule_id"] is not None
     items = client.get("/api/transactions?q=PAG SERV", headers=as_user("helder")).json()["items"]
     assert items and all(t["category"] == "Services test" for t in items)
+
+
+def test_budget_on_parent_counts_its_subcategories(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 sub-budget"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    r = client.put("/api/budgets", headers=as_user("helder"),
+                   json={"category": "Groceries", "monthly_limit": "500"})
+    assert r.status_code in (200, 201), r.text
+    statuses = client.get("/api/budgets?month=2026-05", headers=as_user("helder")).json()
+    budget = next(b for b in statuses if b["category"] == "Groceries")
+    assert Decimal(budget["spent"]) == Decimal("123.45")
+
+
+def test_renaming_a_parent_renames_its_subcategories(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 rename-parent"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    cats = client.get("/api/categories", headers=as_user("helder")).json()
+    groceries = next(c for c in cats if c["name"] == "Groceries")
+    assert groceries["id"] is not None
+    r = client.patch(f"/api/categories/{groceries['id']}", headers=as_user("helder"), json={"name": "Food"})
+    assert r.status_code == 200, r.text
+    names = [c["name"] for c in client.get("/api/categories", headers=as_user("helder")).json()]
+    assert f"Food{SEPARATOR}Supermarket" in names
+    assert f"Groceries{SEPARATOR}Supermarket" not in names
+    rows = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
+    assert any(t["category"] == f"Food{SEPARATOR}Supermarket" for t in rows)

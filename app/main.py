@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto, exports
 from .auth import username_from_authorization
-from .categories import DEFAULT_CATEGORIES, UNCATEGORISED
+from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category
 from .config import Settings
 from .db import setup_schema
 from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, WrongAccount,
@@ -114,9 +114,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     key = crypto.load_or_create_key(settings.key_file)
 
     with SessionLocal() as s:
-        if s.query(Category).count() == 0:
+        # Add the default categories once. Installs that predate subcategories get
+        # the full default tree here. After that, nothing is added back.
+        has_subcategories = s.query(Category).filter(Category.name.contains(SEPARATOR)).first() is not None
+        if not has_subcategories:
+            existing = {c.name for c in s.query(Category).all()}
             for name in DEFAULT_CATEGORIES:
-                s.add(Category(name=name))
+                if name not in existing:
+                    s.add(Category(name=name))
             s.commit()
 
     app = FastAPI(title="yunohost-finance", version="0.3.0")
@@ -557,13 +562,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="category not found")
         new = body.name.strip()
         old = cat.name
-        cat.name = new
-        for t in accepted_query(session, user).filter(Transaction.category == old).all():
-            t.category = new
-        for rule in session.query(Rule).filter_by(category=old).all():
-            rule.category = new
-        for budget in session.query(Budget).filter_by(category=old).all():
-            budget.category = new
+
+        def renamed(name: str) -> str:
+            # Renaming a parent renames its subcategories too: "Old > Child" -> "New > Child".
+            return new + name[len(old):] if in_category(name, old) else name
+
+        for other in session.query(Category).all():
+            if in_category(other.name, old):
+                other.name = renamed(other.name)
+        for t in accepted_query(session, user).all():
+            if in_category(t.category, old):
+                t.category = renamed(t.category)
+        for rule in session.query(Rule).filter_by(owner_id=user.id).all():
+            if in_category(rule.category, old):
+                rule.category = renamed(rule.category)
+        for budget in session.query(Budget).filter_by(owner_id=user.id).all():
+            if in_category(budget.category, old):
+                budget.category = renamed(budget.category)
         session.commit()
         return {"name": new}
 
@@ -640,7 +655,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             spent[t.category] += -t.amount
         out = []
         for b in session.query(Budget).filter_by(owner_id=user.id).order_by(Budget.category).all():
-            used = spent.get(b.category, Decimal("0"))
+            # A budget on a parent also counts its subcategories.
+            used = sum((v for k, v in spent.items() if in_category(k, b.category)), Decimal("0"))
             percent = float(used / b.monthly_limit * 100) if b.monthly_limit else 0.0
             status = "over" if percent >= 100 else "near" if percent >= 80 else "ok"
             out.append({"id": b.id, "category": b.category, "monthly_limit": str(b.monthly_limit),
