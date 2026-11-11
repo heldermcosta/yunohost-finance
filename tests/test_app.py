@@ -586,3 +586,17 @@ def test_ignored_terms_are_saved_per_user_and_used_in_the_groups(client, text_by
 
     too_long = client.put("/api/me/ignored-terms", headers=as_user("helder"), json={"terms": ["X" * 41]})
     assert too_long.status_code == 422
+
+
+def test_duplicate_upload_names_the_earlier_copy_for_people_who_can_see_it(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 same-file"
+    text_by_pdf[pdf] = basic_statement()
+    assert upload(client, "helder", account_id, pdf, name="first.pdf").status_code == 201
+    again = upload(client, "helder", account_id, pdf, name="copy.pdf")
+    assert again.status_code == 409
+    message = again.json()["detail"]["message"]
+    assert "first.pdf" in message and "ActivoBank Helder" in message
+
+    # Elsa cannot see Helder's account at all, so she gets no hint of its statements.
+    assert upload(client, "elsa", account_id, pdf, name="copy.pdf").status_code == 404

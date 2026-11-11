@@ -369,7 +369,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 work_dir=settings.work_dir,
             )
         except DuplicateStatement as exc:
-            raise _err(409, "duplicate", "This statement was already imported.", statement_id=exc.statement_id)
+            # Name the earlier copy only when this user can see its account.
+            existing = session.get(Statement, exc.statement_id)
+            details = ""
+            if existing is not None and existing.account_id in visible_ids(session, user):
+                label = account_labels(session, user).get(existing.account_id, "")
+                details = (f" It is {existing.original_name} ({label}, "
+                           f"{existing.period_start.isoformat()} to {existing.period_end.isoformat()}).")
+            raise _err(409, "duplicate", "This statement was already imported." + details,
+                       statement_id=exc.statement_id)
         except WrongInstitution as exc:
             raise _err(422, "wrong_institution", str(exc))
         except WrongAccount as exc:
