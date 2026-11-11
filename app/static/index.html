@@ -153,6 +153,12 @@ tr.total:hover td { background: var(--card-2); }
 .bar.near > i { background: var(--warn); }
 .bar.over > i { background: var(--bad); }
 
+/* Time slider on the Overview */
+.timeline { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; flex-wrap: wrap; }
+.timeline input[type=range] { flex: 1 1 220px; min-height: 0; height: 6px; padding: 0; border: 0; accent-color: var(--accent); cursor: pointer; background: transparent; }
+.timeline-label { font-weight: 600; min-width: 150px; text-align: center; font-variant-numeric: tabular-nums; }
+.timeline button { min-width: 32px; }
+
 /* Column chart */
 .chart { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px; }
 .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
@@ -250,8 +256,16 @@ tr.cg-row td:first-child { width: 28px; }
 <section id="tab-overview" class="active">
   <div class="card">
     <div class="row">
-      <div class="wide"><h2 data-i18n="insights_title">Insights</h2></div>
+      <div class="wide"><h2 data-i18n="insights_title">Insights</h2>
+        <p class="muted" id="ov-intro"></p></div>
       <div class="auto"><label for="ov-month" data-i18n="month">Month</label><input type="month" id="ov-month"></div>
+    </div>
+    <div class="timeline" role="group" aria-labelledby="ov-slider-label">
+      <button class="small" id="ov-prev" type="button" aria-label="Previous month">&#8249;</button>
+      <input type="range" id="ov-slider" min="0" max="23" step="1" value="23" aria-label="Choose month">
+      <button class="small" id="ov-next" type="button" aria-label="Next month">&#8250;</button>
+      <span class="timeline-label" id="ov-slider-label"></span>
+      <button class="small" id="ov-now" type="button"></button>
     </div>
     <div id="ins-kpis" class="kpis"></div>
     <ul id="ins-notes"></ul>
@@ -749,6 +763,7 @@ async function renderInsights() {
     return;
   }
   if (!picked) $("ov-month").value = data.month;
+  syncSlider($("ov-month").value);
   const kpi = (label, value, sub) => el("div", { class: "kpi" }, [
     el("div", { class: "muted", text: label }), el("div", { class: "kpi-value", text: value }),
     sub ? el("div", { class: "muted", text: sub }) : null,
@@ -818,6 +833,7 @@ async function renderInsights() {
 }
 
 LOADERS.overview = async () => {
+  applyOverviewText();
   await loadAccounts(); await loadCategories();
   renderInsights().catch(e => toast("error", errorText(e)));
   const year = await loadYears($("ov-year"));
@@ -848,7 +864,51 @@ LOADERS.overview = async () => {
   await loadBudgets();
 };
 
-$("ov-month").addEventListener("change", () => renderInsights().catch(e => toast("error", errorText(e))));
+// Time slider: the last 24 months, one step per month. It drives the same month as the month input.
+const SLIDER_MONTHS = 24;
+const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function monthAt(i) {
+  const d = new Date();
+  return ymOf(new Date(d.getFullYear(), d.getMonth() - (SLIDER_MONTHS - 1 - i), 1));
+}
+function monthLabel(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(lang === "pt" ? "pt-PT" : "en-GB", { month: "long", year: "numeric" });
+}
+function indexOfMonth(ym) {
+  for (let i = 0; i < SLIDER_MONTHS; i++) if (monthAt(i) === ym) return i;
+  return -1;
+}
+function syncSlider(ym) {
+  const i = indexOfMonth(ym);
+  if (i >= 0) $("ov-slider").value = i;
+  $("ov-slider-label").textContent = ym ? monthLabel(ym) : "";
+}
+function applyOverviewText() {
+  $("ov-intro").textContent = L("Pick a month with the slider to see its income, spending and where it went.",
+                                 "Escolha um mês com o deslizador para ver receitas, despesas e para onde foram.");
+  $("ov-now").textContent = L("This month", "Este mês");
+  $("ov-prev").setAttribute("aria-label", L("Previous month", "Mês anterior"));
+  $("ov-next").setAttribute("aria-label", L("Next month", "Mês seguinte"));
+  $("ov-slider").setAttribute("aria-label", L("Choose month", "Escolher mês"));
+}
+function setOverviewMonth(ym) {
+  $("ov-month").value = ym;
+  syncSlider(ym);
+  renderInsights().catch(e => toast("error", errorText(e)));
+}
+$("ov-month").addEventListener("change", () => setOverviewMonth($("ov-month").value));
+// While dragging, only the label updates; the page reloads when the handle is released.
+$("ov-slider").addEventListener("input", () => { $("ov-slider-label").textContent = monthLabel(monthAt(Number($("ov-slider").value))); });
+$("ov-slider").addEventListener("change", () => setOverviewMonth(monthAt(Number($("ov-slider").value))));
+const stepOverview = (delta) => {
+  const i = Math.min(SLIDER_MONTHS - 1, Math.max(0, Number($("ov-slider").value) + delta));
+  setOverviewMonth(monthAt(i));
+};
+$("ov-prev").addEventListener("click", () => stepOverview(-1));
+$("ov-next").addEventListener("click", () => stepOverview(1));
+$("ov-now").addEventListener("click", () => setOverviewMonth(monthAt(SLIDER_MONTHS - 1)));
+applyOverviewText();
 
 async function loadBudgets() {
   if (!$("bd-month").value) $("bd-month").value = new Date().toISOString().slice(0, 7);
