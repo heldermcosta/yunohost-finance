@@ -24,7 +24,8 @@ from .base import ParsedStatement, Transaction
 
 INSTITUTION = "activobank"
 
-AMT_RE = re.compile(r"-?\d{1,3}(?:\s\d{3})*\.\d{2}")
+# A trailing "-" marks a negative balance (overdraft), e.g. "62 809.11-".
+AMT_RE = re.compile(r"-?\d{1,3}(?:\s\d{3})*\.\d{2}-?")
 DATE_LEAD_RE = re.compile(r"^\s*(\d{1,2}\.\d{1,2})\s+(\d{1,2}\.\d{1,2})\s")
 EXTRATO_DE_RE = re.compile(
     r"EXTRATO DE\s+(\d{4})/(\d{2})/(\d{2})\s+A\s+(\d{4})/(\d{2})/(\d{2})"
@@ -43,7 +44,9 @@ class ActivoBankParseError(ValueError):
 
 
 def _money(s: str) -> Decimal:
-    return Decimal(s.replace(" ", "").replace("\xa0", ""))
+    negative = s.endswith("-")
+    value = Decimal(s.rstrip("-").replace(" ", "").replace("\xa0", ""))
+    return -value if negative else value
 
 
 def _resolve_year(month: int, start: date, end: date) -> int:

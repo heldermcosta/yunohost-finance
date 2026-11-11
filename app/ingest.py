@@ -119,7 +119,8 @@ def _match_account(session: Session, account: Account | None, owner_accounts: li
             unnamed[0].account_ref_last4 = ref_last4
             session.flush()
             return unnamed[0]
-        raise AccountNeeded(institution, [a.id for a in same_bank])
+        # Only accounts that could take this statement are offered.
+        raise AccountNeeded(institution, [a.id for a in same_bank if not a.account_ref_last4])
     if len(same_bank) == 1:
         return same_bank[0]
     raise AccountNeeded(institution, [a.id for a in same_bank])

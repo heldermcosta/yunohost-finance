@@ -171,3 +171,9 @@ def test_rows_after_saldo_final_are_ignored():
     st = ActivoBankParser().parse(text)
     assert len(st.transactions) == 3
     assert reconcile(st).ok
+
+
+def test_trailing_minus_is_a_negative_balance():
+    from app.parsers.activobank import _money
+    assert _money("62 809.11-") == Decimal("-62809.11")
+    assert _money("1 341.46") == Decimal("1341.46")
