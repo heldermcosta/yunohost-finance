@@ -649,6 +649,7 @@ en: {
   choose_account_title:"Which account is this statement for?", choose_account_note:"{file} matches several accounts or none. Pick the right one.", no_account_match:"No account matches this statement. Create one under Accounts first.",
   password_title:"Password for {file}", password_note:"This PDF is protected. Enter its password. It will be saved for future statements if it works.", skip_file:"Skip this file",
   result_accepted:"accepted, {n} transactions", result_review:"needs review, {n} transactions", already:"already imported", error:"error",
+  result_updated:"already imported, updated: {d} descriptions, {m} dates, {n} new movements", result_unchanged:"already imported, nothing new", result_check:"{c} to check by hand",
   summary_done:"{ok} imported, {dup} already imported, {err} with errors", uploading:"Uploading…",
   bulk_updated:"{n} transactions updated", rule_saved:"Rule saved", rule_applied:"Rule applied to {n} transactions",
   pw_added:"Password saved", pw_none:"No saved passwords.", cat_none:"No categories.", cat_exists:"Already exists",
@@ -690,6 +691,7 @@ pt: {
   choose_account_title:"A que conta pertence este extrato?", choose_account_note:"{file} corresponde a várias contas ou a nenhuma. Escolha a certa.", no_account_match:"Nenhuma conta corresponde a este extrato. Crie uma em Contas primeiro.",
   password_title:"Palavra-passe de {file}", password_note:"Este PDF está protegido. Escreva a palavra-passe. Fica guardada para os próximos extratos se funcionar.", skip_file:"Ignorar este ficheiro",
   result_accepted:"aceite, {n} movimentos", result_review:"precisa de revisão, {n} movimentos", already:"já importado", error:"erro",
+  result_updated:"já importado, atualizado: {d} descrições, {m} datas, {n} movimentos novos", result_unchanged:"já importado, nada de novo", result_check:"{c} para verificar à mão",
   summary_done:"{ok} importados, {dup} já importados, {err} com erro", uploading:"A enviar…",
   bulk_updated:"{n} movimentos atualizados", rule_saved:"Regra guardada", rule_applied:"Regra aplicada a {n} movimentos",
   pw_added:"Palavra-passe guardada", pw_none:"Sem palavras-passe guardadas.", cat_none:"Sem categorias.", cat_exists:"Já existe",
@@ -1531,6 +1533,17 @@ async function importFiles(files) {
       try {
         const res = await uploadOne(file, account, password);
         counts.ok++;
+        if (res.reimported) {
+          // The file was already stored: it was read again and only what is new was brought in.
+          const c = res.counts;
+          let text = res.status === "updated"
+            ? t("result_updated", { d: c.fill_descriptions, m: c.move_dates, n: c.to_add })
+            : t("result_unchanged");
+          if (res.to_check) text += " · " + t("result_check", { c: res.to_check });
+          setLine(text, res.status === "updated" ? "pos" : "muted");
+          toast(res.status === "updated" ? "success" : "warn", file.name, text);
+          break;
+        }
         const text = res.status === "accepted" ? t("result_accepted", { n: res.transaction_count }) : t("result_review", { n: res.transaction_count });
         setLine(text, res.status === "accepted" ? "pos" : "warn");
         toast(res.status === "accepted" ? "success" : "warn", file.name, text);

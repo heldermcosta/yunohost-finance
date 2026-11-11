@@ -137,12 +137,15 @@ def test_failed_statement_goes_to_review_and_stays_out_of_analytics(client, text
     assert len(client.get("/api/summary/monthly", headers=as_user("helder")).json()) > 0
 
 
-def test_same_pdf_twice_is_refused(client, text_by_pdf):
+def test_same_pdf_twice_is_read_again_and_nothing_is_duplicated(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 once"
     text_by_pdf[pdf] = basic_statement()
     assert upload(client, "helder", account_id, pdf).status_code == 201
-    assert upload(client, "helder", account_id, pdf).status_code == 409
+    again = upload(client, "helder", account_id, pdf)
+    assert again.status_code == 200, again.text
+    assert again.json()["status"] == "unchanged"
+    assert client.get("/api/transactions", headers=as_user("helder")).json()["total"] == 3
 
 
 def test_wrong_institution_is_refused(client, text_by_pdf):
@@ -565,8 +568,8 @@ def test_bulk_delete_removes_owned_statements_and_skips_the_rest(client, text_by
     assert client.post(f"/api/accounts/{account_id}/shares", headers=as_user("helder"),
                        json={"username": "anna"}).status_code == 201
     ids = []
-    for name in (b"%PDF-1.4 bulk-a", b"%PDF-1.4 bulk-b"):
-        text_by_pdf[name] = basic_statement()
+    for name, period in ((b"%PDF-1.4 bulk-a", "2026/05/01 A 2026/05/31"), (b"%PDF-1.4 bulk-b", "2026/06/01 A 2026/06/30")):
+        text_by_pdf[name] = basic_statement().replace("2026/05/01 A 2026/05/31", period)
         ids.append(upload(client, "helder", account_id, name).json()["statement_id"])
     # Anna can see the shared account but cannot delete its statements.
     r = client.post("/api/statements/bulk-delete", headers=as_user("anna"), json={"ids": ids})
@@ -627,15 +630,14 @@ def test_ignored_terms_are_saved_per_user_and_used_in_the_groups(client, text_by
     assert too_long.status_code == 422
 
 
-def test_duplicate_upload_names_the_earlier_copy_for_people_who_can_see_it(client, text_by_pdf):
+def test_duplicate_upload_is_read_again_for_the_owner(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 same-file"
     text_by_pdf[pdf] = basic_statement()
     assert upload(client, "helder", account_id, pdf, name="first.pdf").status_code == 201
     again = upload(client, "helder", account_id, pdf, name="copy.pdf")
-    assert again.status_code == 409
-    message = again.json()["detail"]["message"]
-    assert "first.pdf" in message and "ActivoBank Helder" in message
+    assert again.status_code == 200
+    assert again.json()["status"] == "unchanged"
 
     # Elsa cannot see Helder's account at all, so she gets no hint of its statements.
     assert upload(client, "elsa", account_id, pdf, name="copy.pdf").status_code == 404

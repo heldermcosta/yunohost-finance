@@ -36,6 +36,14 @@ class DuplicateStatement(Exception):
         self.statement_id = statement_id
 
 
+class SamePeriodStatement(Exception):
+    """A different file of the same account and period is already stored: it is the same statement."""
+
+    def __init__(self, statement_id: int):
+        super().__init__(f"same account and period as statement {statement_id}")
+        self.statement_id = statement_id
+
+
 class WrongInstitution(Exception):
     pass
 
@@ -187,6 +195,18 @@ def import_pdf(
     # Only the last four digits are kept, and only for matching.
     ref_last4 = (parsed.account_ref or "")[-4:]
     account = _match_account(session, account, owner_accounts, parser.institution, ref_last4)
+    same_period = (
+        session.query(Statement)
+        .filter(Statement.account_id == account.id,
+                Statement.period_start == parsed.period_start,
+                Statement.period_end == parsed.period_end)
+        .order_by(Statement.id)
+        .first()
+    )
+    if same_period is not None and result.ok:
+        # Same account, same period, and it adds up: the same statement, read again.
+        # A reading that does not add up stays a separate statement for review.
+        raise SamePeriodStatement(same_period.id)
     status = "accepted" if result.ok else "review"
 
     notes = list(parsed.anomalies) + list(result.row_warnings)

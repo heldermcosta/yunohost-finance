@@ -253,3 +253,36 @@ def test_overlapping_statement_of_the_same_account_is_noted(client, text_by_pdf)
     r = upload(client, "helder", account_id, second, name="EXTRATO COMBINADO 2026006.pdf")
     assert r.status_code == 201, r.text
     assert any("overlaps statement" in note for note in r.json()["notes"])
+
+
+def test_uploading_an_existing_statement_again_brings_in_its_changes(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 upload-refresh"
+    text_by_pdf[pdf] = _blank_row_statement()
+    assert upload(client, "helder", account_id, pdf).status_code == 201
+
+    blank = next(t for t in _transactions(client, "helder") if t["description"] == "")
+    client.post("/api/transactions/bulk-category", headers=as_user("helder"),
+                json={"ids": [blank["id"]], "category": "Groceries > Supermarket"})
+
+    text_by_pdf[pdf] = basic_statement()  # the same file, now read with the description
+    again = upload(client, "helder", account_id, pdf)
+    assert again.status_code == 200, again.text
+    assert again.json()["status"] == "updated"
+    assert again.json()["counts"]["fill_descriptions"] == 1
+
+    row = next(t for t in _transactions(client, "helder") if t["id"] == blank["id"])
+    assert row["description"] == "COMPRA CONTINENTE"
+    assert row["category"] == "Groceries > Supermarket"
+
+
+def test_another_file_for_the_same_period_that_does_not_add_up_is_kept_for_review(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    first = b"%PDF-1.4 period-first"
+    second = b"%PDF-1.4 period-second"
+    text_by_pdf[first] = basic_statement()
+    text_by_pdf[second] = basic_statement(closing_override="2 026.56")
+    assert upload(client, "helder", account_id, first).status_code == 201
+    r = upload(client, "helder", account_id, second, name="EXTRATO 2.pdf")
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "review"
