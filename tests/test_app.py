@@ -498,6 +498,23 @@ def test_renaming_a_parent_renames_its_subcategories(client, text_by_pdf):
     assert any(t["category"] == f"Food{SEPARATOR}Supermarket" for t in rows)
 
 
+def test_insights_period_is_the_sum_of_its_months(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 insights-period"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    single = client.get("/api/insights?month=2026-05", headers=as_user("helder")).json()
+    same = client.get("/api/insights?month=2026-05&start=2026-05", headers=as_user("helder")).json()
+    assert same["expenses"] == single["expenses"] and same["income"] == single["income"]
+    period = client.get("/api/insights?month=2026-05&start=2026-04", headers=as_user("helder")).json()
+    april = client.get("/api/insights?month=2026-04", headers=as_user("helder")).json()
+    assert period["period_months"] == 2 and period["start"] == "2026-04"
+    assert Decimal(period["expenses"]) == Decimal(april["expenses"]) + Decimal(single["expenses"])
+    assert period["previous_start"] == "2026-02"
+    assert client.get("/api/insights?month=2026-05&start=2026-06", headers=as_user("helder")).status_code == 422
+    assert client.get("/api/insights?month=2026-05&start=bad", headers=as_user("helder")).status_code == 422
+
+
 def test_insights_for_a_month(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 insights"
