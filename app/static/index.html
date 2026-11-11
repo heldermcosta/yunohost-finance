@@ -416,6 +416,9 @@ const money = (v) => eur.format(Number(v));
 function el(tag, props = {}, children = []) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
+    // null, undefined and false mean "no attribute". Setting them would create the
+    // attribute with the text "null", e.g. selected or disabled on every option.
+    if (v === null || v === undefined || v === false) continue;
     if (k === "class") n.className = v;
     else if (k === "text") n.textContent = v;
     else if (k === "on") for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
