@@ -685,9 +685,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return sorted({r[0].year for r in rows}, reverse=True)
 
     @app.get("/api/insights")
-    def insights(month: str | None = None, user: User = Depends(get_current_user),
-                 session: Session = Depends(get_session)) -> dict:
-        """Figures for one month, compared with the month before. Transfers are left out."""
+    def insights(month: str | None = None, start: str | None = None,
+                 user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        """Figures for a period from `start` to `month` (both YYYY-MM, inclusive; start defaults to month).
+
+        The period is compared with the period of the same length just before it. The trend,
+        recurring payments and balances stay anchored on `month`. Transfers are left out.
+        """
         rows = accepted_query(session, user).filter(Transaction.is_transfer.is_(False)).all()
         with_data = sorted({t.booked_on.strftime("%Y-%m") for t in rows})
         if not with_data:
@@ -696,7 +700,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             month = with_data[-1]
         if not _valid_month(month):
             raise HTTPException(status_code=422, detail="month must be YYYY-MM")
-        prev = _shift_month(month, -1)
+        if start is None:
+            start = month
+        if not _valid_month(start) or start > month:
+            raise HTTPException(status_code=422, detail="start must be YYYY-MM and not after month")
+        span = (int(month[:4]) * 12 + int(month[5:])) - (int(start[:4]) * 12 + int(start[5:])) + 1
+        period = [_shift_month(start, i) for i in range(span)]
+        prev_period = [_shift_month(start, i - span) for i in range(span)]
+        prev = prev_period[-1]
 
         by_month: dict[str, list[Transaction]] = defaultdict(list)
         for t in rows:
@@ -707,15 +718,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             expenses = sum((-t.amount for t in items if t.amount < 0), Decimal("0"))
             return income, expenses
 
-        cur_items = by_month.get(month, [])
+        cur_items = [t for m in period for t in by_month.get(m, [])]
+        prev_items = [t for m in prev_period for t in by_month.get(m, [])]
         income, expenses = totals(cur_items)
-        prev_income, prev_expenses = totals(by_month.get(prev, []))
+        prev_income, prev_expenses = totals(prev_items)
         net = income - expenses
 
         def change(now: Decimal, before: Decimal) -> float | None:
             return round(float((now - before) / before * 100), 1) if before > 0 else None
 
-        earlier = [m for m in with_data if m < month][-3:]
+        earlier = [m for m in with_data if m < start][-3:]
         avg_3m = (sum((totals(by_month[m])[1] for m in earlier), Decimal("0")) / len(earlier)) if earlier else None
 
         # Spending by category, grouped under the parent, with subcategories.
@@ -727,7 +739,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 parent_now[parent_of(t.category)] += -t.amount
                 if SEPARATOR in t.category:
                     children[parent_of(t.category)][t.category] += -t.amount
-        for t in by_month.get(prev, []):
+        for t in prev_items:
             if t.amount < 0:
                 parent_prev[parent_of(t.category)] += -t.amount
         categories = []
@@ -799,7 +811,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                    "monthly_limit": b["monthly_limit"]} for b in budget_rows if b.get("status") in ("over", "near")]
 
         return {
-            "month": month, "previous_month": prev,
+            "month": month, "start": start, "previous_month": prev,
+            "previous_start": prev_period[0], "first_month": with_data[0], "period_months": span,
             "income": str(income), "expenses": str(expenses), "net": str(net),
             "savings_rate": round(float(net / income * 100), 1) if income > 0 else None,
             "previous_income": str(prev_income), "previous_expenses": str(prev_expenses),

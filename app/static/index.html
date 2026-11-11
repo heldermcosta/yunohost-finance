@@ -153,11 +153,20 @@ tr.total:hover td { background: var(--card-2); }
 .bar.near > i { background: var(--warn); }
 .bar.over > i { background: var(--bad); }
 
-/* Time slider on the Overview */
-.timeline { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; flex-wrap: wrap; }
-.timeline input[type=range] { flex: 1 1 220px; min-height: 0; height: 6px; padding: 0; border: 0; accent-color: var(--accent); cursor: pointer; background: transparent; }
-.timeline-label { font-weight: 600; min-width: 150px; text-align: center; font-variant-numeric: tabular-nums; }
-.timeline button { min-width: 32px; }
+/* Period controls on the Overview: quick chips and a From / To pair of sliders */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 0; }
+.chip {
+  min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  color: var(--muted); background: var(--card-2);
+}
+.chip:hover { color: var(--text); }
+.chip[aria-pressed="true"] { color: var(--accent); background: var(--soft); border-color: transparent; font-weight: 600; }
+.range { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 22px; margin-top: 14px; }
+.range label { margin: 0 0 4px; }
+.range-line { display: flex; align-items: center; gap: 12px; }
+.range input[type=range] { flex: 1 1 auto; min-width: 0; min-height: 0; height: 6px; padding: 0; border: 0; accent-color: var(--accent); cursor: pointer; background: transparent; }
+.range-value { min-width: 128px; text-align: right; font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ov-range-label { margin: 10px 0 0; }
 
 /* Column chart */
 .chart { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px; }
@@ -265,15 +274,21 @@ tr.cg-row td:first-child { width: 28px; }
     <div class="row">
       <div class="wide"><h2 data-i18n="insights_title">Insights</h2>
         <p class="muted" id="ov-intro"></p></div>
-      <div class="auto"><label for="ov-month" data-i18n="month">Month</label><input type="month" id="ov-month"></div>
     </div>
-    <div class="timeline" role="group" aria-labelledby="ov-slider-label">
-      <button class="small" id="ov-prev" type="button" aria-label="Previous month">&#8249;</button>
-      <input type="range" id="ov-slider" min="0" max="23" step="1" value="23" aria-label="Choose month">
-      <button class="small" id="ov-next" type="button" aria-label="Next month">&#8250;</button>
-      <span class="timeline-label" id="ov-slider-label"></span>
-      <button class="small" id="ov-now" type="button"></button>
+    <div class="chips" id="ov-chips" role="group" aria-label="Quick periods"></div>
+    <div class="range">
+      <div class="range-side">
+        <label for="ov-slider-start" id="ov-from-label">From</label>
+        <div class="range-line"><input type="range" id="ov-slider-start" min="0" max="23" step="1" value="0"><span class="range-value" id="ov-start-label"></span></div>
+      </div>
+      <div class="range-side">
+        <label for="ov-slider-end" id="ov-to-label">To</label>
+        <div class="range-line"><input type="range" id="ov-slider-end" min="0" max="23" step="1" value="23"><span class="range-value" id="ov-end-label"></span></div>
+      </div>
     </div>
+    <p class="muted" id="ov-range-label"></p>
+    <input type="hidden" id="ov-start">
+    <input type="hidden" id="ov-month">
     <div id="ins-kpis" class="kpis"></div>
     <ul id="ins-notes"></ul>
   </div>
@@ -359,11 +374,6 @@ tr.cg-row td:first-child { width: 28px; }
   </div>
   <div class="card">
     <div class="table-wrap" id="tx-table"></div>
-    <div class="pager">
-      <button class="small" id="tx-prev" data-i18n="prev">Previous</button>
-      <span class="muted" id="tx-page"></span>
-      <button class="small" id="tx-next" data-i18n="next">Next</button>
-    </div>
   </div>
 </section>
 
@@ -771,8 +781,13 @@ function simpleTable(headers, rows) {
 }
 
 async function renderInsights() {
-  const picked = $("ov-month").value;
-  const data = await api("insights" + (picked ? "?month=" + picked : ""));
+  const end = $("ov-month").value, start = $("ov-start").value;
+  const data = await api("insights" + (end ? `?month=${end}&start=${start || end}` : ""));
+  if (data.first_month) {
+    FIRST_MONTH = data.first_month;
+    if (data.first_month < domainStart()) DOMAIN_START = data.first_month;
+    setSliderDomain();
+  }
   if (!data.month) {
     $("ins-kpis").replaceChildren(emptyState(
       L("Nothing to show yet", "Ainda não há nada para mostrar"),
@@ -782,8 +797,8 @@ async function renderInsights() {
     for (const id of ["ins-notes", "ins-cats", "ins-trend", "ins-merchants", "ins-recurring", "ins-largest", "ins-balances"]) $(id).replaceChildren();
     return;
   }
-  if (!picked) $("ov-month").value = data.month;
-  syncSlider($("ov-month").value);
+  if (!end) setPeriod(data.month, data.month, { render: false });
+  else syncPeriodLabels();
   const kpi = (label, value, sub) => el("div", { class: "kpi" }, [
     el("div", { class: "muted", text: label }), el("div", { class: "kpi-value", text: value }),
     sub ? el("div", { class: "muted", text: sub }) : null,
@@ -801,11 +816,11 @@ async function renderInsights() {
   const notes = [];
   if (net < 0) notes.push(L("You spent more than you earned this month.", "Gastou mais do que recebeu neste mês."));
   if (data.expenses_change !== null && Math.abs(data.expenses_change) >= 10)
-    notes.push(L(`Spending is ${data.expenses_change > 0 ? "up" : "down"} ${Math.abs(data.expenses_change).toFixed(1)}% on last month.`,
-                 `A despesa ${data.expenses_change > 0 ? "subiu" : "desceu"} ${Math.abs(data.expenses_change).toFixed(1)}% em relação ao mês anterior.`));
+    notes.push(L(`Spending is ${data.expenses_change > 0 ? "up" : "down"} ${Math.abs(data.expenses_change).toFixed(1)}% on the period before.`,
+                 `A despesa ${data.expenses_change > 0 ? "subiu" : "desceu"} ${Math.abs(data.expenses_change).toFixed(1)}% em relação ao período anterior.`));
   for (const c of data.categories.filter(c => c.change !== null && c.change >= 25 && Number(c.total) >= 50).slice(0, 3))
-    notes.push(L(`${c.category} rose ${c.change.toFixed(1)}% on last month (${money(c.total)}).`,
-                 `${c.category} subiu ${c.change.toFixed(1)}% em relação ao mês anterior (${money(c.total)}).`));
+    notes.push(L(`${c.category} rose ${c.change.toFixed(1)}% on the period before (${money(c.total)}).`,
+                 `${c.category} subiu ${c.change.toFixed(1)}% em relação ao período anterior (${money(c.total)}).`));
   if (data.categories.length) {
     const top = data.categories[0];
     notes.push(L(`Largest category: ${top.category}, ${money(top.total)} (${top.share}% of spending).`,
@@ -865,8 +880,8 @@ LOADERS.overview = async () => {
   const monthTotal = (m) => rows.filter(r => r.month === m).reduce((s, r) => s + Number(r.expenses), 0);
 
   const max = Math.max(1, ...months.map(monthTotal));
-  const picked = $("ov-month").value;
-  $("ov-chart").replaceChildren(...(months.length ? months.map(m => el("div", { class: "col" + (m === picked ? " selected" : ""), title: `${m}: ${money(monthTotal(m))}` }, [
+  const selStart = $("ov-start").value, selEnd = $("ov-month").value;
+  $("ov-chart").replaceChildren(...(months.length ? months.map(m => el("div", { class: "col" + (selEnd && m >= selStart && m <= selEnd ? " selected" : ""), title: `${m}: ${money(monthTotal(m))}` }, [
     el("b", { text: monthTotal(m) ? money(monthTotal(m)) : "" }),
     el("i", { style: `height:${(monthTotal(m) / max * 100).toFixed(1)}%` }),
     el("span", { text: m.slice(5) }),
@@ -890,50 +905,88 @@ LOADERS.overview = async () => {
   await loadBudgets();
 };
 
-// Time slider: the last 24 months, one step per month. It drives the same month as the month input.
-const SLIDER_MONTHS = 24;
-const ymOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-function monthAt(i) {
-  const d = new Date();
-  return ymOf(new Date(d.getFullYear(), d.getMonth() - (SLIDER_MONTHS - 1 - i), 1));
+// Period controls: a From and To month, chosen with two sliders or quick chips.
+// Sliders run from DOMAIN_START (the oldest month with data, or the last 24 months) to this month.
+let DOMAIN_START = null, FIRST_MONTH = null;
+const todayYM = () => ymOf(new Date());
+function ymOf(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function addMonths(ym, n) { const [y, m] = ym.split("-").map(Number); return ymOf(new Date(y, m - 1 + n, 1)); }
+function monthsBetween(a, b) {
+  const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number);
+  return (by - ay) * 12 + (bm - am);
 }
+function domainStart() { if (!DOMAIN_START) DOMAIN_START = addMonths(todayYM(), -23); return DOMAIN_START; }
 function monthLabel(ym) {
   const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString(lang === "pt" ? "pt-PT" : "en-GB", { month: "long", year: "numeric" });
+  return new Date(y, m - 1, 1).toLocaleDateString(lang === "pt" ? "pt-PT" : "en-GB", { month: "short", year: "numeric" });
 }
-function indexOfMonth(ym) {
-  for (let i = 0; i < SLIDER_MONTHS; i++) if (monthAt(i) === ym) return i;
-  return -1;
+const clampYM = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+function setSliderDomain() {
+  const max = String(monthsBetween(domainStart(), todayYM()));
+  for (const id of ["ov-slider-start", "ov-slider-end"]) $(id).max = max;
 }
-function syncSlider(ym) {
-  const i = indexOfMonth(ym);
-  if (i >= 0) $("ov-slider").value = i;
-  $("ov-slider-label").textContent = ym ? monthLabel(ym) : "";
+function syncPeriodLabels() {
+  const start = $("ov-start").value, end = $("ov-month").value;
+  if (!end) return;
+  $("ov-slider-start").value = monthsBetween(domainStart(), start);
+  $("ov-slider-end").value = monthsBetween(domainStart(), end);
+  $("ov-start-label").textContent = monthLabel(start);
+  $("ov-end-label").textContent = monthLabel(end);
+  const n = monthsBetween(start, end) + 1;
+  $("ov-range-label").textContent = start === end
+    ? L(`Showing ${monthLabel(end)}.`, `A mostrar ${monthLabel(end)}.`)
+    : L(`Showing ${n} months, ${monthLabel(start)} to ${monthLabel(end)}.`, `A mostrar ${n} meses, de ${monthLabel(start)} a ${monthLabel(end)}.`);
+  for (const b of $("ov-chips").children) {
+    const [s0, e0] = b.dataset.range.split("|");
+    b.setAttribute("aria-pressed", String(s0 === start && e0 === end));
+  }
+}
+// Sets the period. `moved` says which handle the user moved, so the other one gives way.
+function setPeriod(start, end, { render = true, moved = "end" } = {}) {
+  const today = todayYM(), first = domainStart();
+  if (!end) end = today;           // nothing chosen yet: default to this month
+  if (!start) start = end;
+  end = clampYM(end, first, today);
+  start = clampYM(start, first, today);
+  if (start > end) { if (moved === "start") end = start; else start = end; }
+  $("ov-start").value = start;
+  $("ov-month").value = end;
+  syncPeriodLabels();
+  if (render) renderInsights().catch(e => toast("error", errorText(e)));
+}
+function presets() {
+  const t = todayYM(), y = t.slice(0, 4), last = addMonths(t, -1);
+  return [
+    [L("This month", "Este mês"), t, t],
+    [L("Last month", "Mês passado"), last, last],
+    [L("Last 3 months", "Últimos 3 meses"), addMonths(t, -2), t],
+    [L("Last 6 months", "Últimos 6 meses"), addMonths(t, -5), t],
+    [L("Last 12 months", "Últimos 12 meses"), addMonths(t, -11), t],
+    [L("Year to date", "Ano até hoje"), `${y}-01`, t],
+    [L("Last year", "Ano passado"), `${Number(y) - 1}-01`, `${Number(y) - 1}-12`],
+    [L("All time", "Tudo"), FIRST_MONTH || domainStart(), t],
+  ];
+}
+function renderChips() {
+  $("ov-chips").replaceChildren(...presets().map(([label, s0, e0]) => el("button", {
+    class: "chip", type: "button", text: label, "data-range": `${s0}|${e0}`, "aria-pressed": "false",
+    on: { click: () => setPeriod(s0, e0, { moved: "end" }) },
+  })));
+  syncPeriodLabels();
 }
 function applyOverviewText() {
-  $("ov-intro").textContent = L("Pick a month with the slider to see its income, spending and where it went.",
-                                 "Escolha um mês com o deslizador para ver receitas, despesas e para onde foram.");
-  $("ov-now").textContent = L("This month", "Este mês");
-  $("ov-prev").setAttribute("aria-label", L("Previous month", "Mês anterior"));
-  $("ov-next").setAttribute("aria-label", L("Next month", "Mês seguinte"));
-  $("ov-slider").setAttribute("aria-label", L("Choose month", "Escolher mês"));
+  $("ov-intro").textContent = L("Choose a period with the chips or the sliders to see its income, spending and where it went.",
+                                 "Escolha um período com os atalhos ou os deslizadores para ver receitas, despesas e para onde foram.");
+  $("ov-from-label").textContent = L("From", "De");
+  $("ov-to-label").textContent = L("To", "Até");
+  renderChips();
 }
-function setOverviewMonth(ym) {
-  $("ov-month").value = ym;
-  syncSlider(ym);
-  renderInsights().catch(e => toast("error", errorText(e)));
-}
-$("ov-month").addEventListener("change", () => setOverviewMonth($("ov-month").value));
-// While dragging, only the label updates; the page reloads when the handle is released.
-$("ov-slider").addEventListener("input", () => { $("ov-slider-label").textContent = monthLabel(monthAt(Number($("ov-slider").value))); });
-$("ov-slider").addEventListener("change", () => setOverviewMonth(monthAt(Number($("ov-slider").value))));
-const stepOverview = (delta) => {
-  const i = Math.min(SLIDER_MONTHS - 1, Math.max(0, Number($("ov-slider").value) + delta));
-  setOverviewMonth(monthAt(i));
-};
-$("ov-prev").addEventListener("click", () => stepOverview(-1));
-$("ov-next").addEventListener("click", () => stepOverview(1));
-$("ov-now").addEventListener("click", () => setOverviewMonth(monthAt(SLIDER_MONTHS - 1)));
+$("ov-slider-start").addEventListener("input", () => { $("ov-start-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-start").value))); });
+$("ov-slider-end").addEventListener("input", () => { $("ov-end-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-end").value))); });
+$("ov-slider-start").addEventListener("change", () => setPeriod(addMonths(domainStart(), Number($("ov-slider-start").value)), $("ov-month").value, { moved: "start" }));
+$("ov-slider-end").addEventListener("change", () => setPeriod($("ov-start").value, addMonths(domainStart(), Number($("ov-slider-end").value)), { moved: "end" }));
+setSliderDomain();
 applyOverviewText();
 
 async function loadBudgets() {
@@ -981,14 +1034,15 @@ $("ex-pdf").addEventListener("click", () => download("export/report.pdf?year=" +
 $("ex-json").addEventListener("click", () => download("export/backup.json", "finance-backup.json"));
 
 /* ---------- transactions ---------- */
-let txPage = 0; const PAGE = 100; let txTotal = 0;
+let txTotal = 0;
+const TX_CHUNK = 1000; // the server returns at most 1000 rows per request
 function txQuery(offset) {
   const p = new URLSearchParams();
   const map = { account_id: $("tx-account").value, category: $("tx-category").value, transfers: $("tx-transfers").value,
                 q: $("tx-q").value.trim(), start: $("tx-start").value, end: $("tx-end").value,
                 object_name: $("tx-object").value.trim() };
   for (const [k, v] of Object.entries(map)) if (v) p.set(k, v);
-  p.set("limit", PAGE); p.set("offset", offset);
+  p.set("limit", TX_CHUNK); p.set("offset", offset);
   return p.toString();
 }
 const selected = new Set();
@@ -1003,14 +1057,27 @@ async function loadObjects() {
   const names = await api("objects");
   $("objects-list").replaceChildren(...names.map(n => el("option", { value: n })));
 }
+// Collects every row that matches the filters, one request per 1000 rows.
+async function fetchAllTransactions() {
+  const items = [];
+  let total = 0;
+  for (let offset = 0; offset < 100000; offset += TX_CHUNK) {
+    const data = await api("transactions?" + txQuery(offset));
+    total = data.total;
+    items.push(...data.items);
+    if (!data.items.length || items.length >= total) break;
+  }
+  return { items, total };
+}
 LOADERS.transactions = async () => {
   await loadAccounts(); await loadCategories(); loadObjects().catch(() => {});
-  const data = await api("transactions?" + txQuery(txPage * PAGE));
+  const data = await fetchAllTransactions();
   txTotal = data.total;
-  $("tx-count").textContent = (lang === "pt" ? `${txTotal} movimentos` : `${txTotal} transactions`);
-  $("tx-page").textContent = txTotal ? `${txPage * PAGE + 1}–${Math.min(txTotal, (txPage + 1) * PAGE)} / ${txTotal}` : "";
-  $("tx-prev").disabled = txPage === 0;
-  $("tx-next").disabled = (txPage + 1) * PAGE >= txTotal;
+  const inflow = data.items.reduce((sum, t) => sum + (Number(t.amount) > 0 ? Number(t.amount) : 0), 0);
+  const outflow = data.items.reduce((sum, t) => sum + (Number(t.amount) < 0 ? -Number(t.amount) : 0), 0);
+  $("tx-count").textContent = (lang === "pt"
+    ? `${txTotal} movimentos · entradas ${money(inflow)} · saídas ${money(outflow)}`
+    : `${txTotal} transactions · in ${money(inflow)} · out ${money(outflow)}`);
   $("tx-bulk-cat").replaceChildren(...cache.categories.map(c => el("option", { value: c, text: c })));
   updateBulkBar();
   if (!data.items.length) { $("tx-table").replaceChildren(el("p", { class: "muted", text: t("no_transactions") })); return; }
@@ -1136,12 +1203,10 @@ async function changeCategory(tx, category) {
   } catch (e) { toast("error", errorText(e)); }
 }
 
-$("tx-apply").addEventListener("click", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); });
-["tx-account", "tx-category", "tx-object", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
-$("tx-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { txPage = 0; LOADERS.transactions().catch(() => {}); } });
+$("tx-apply").addEventListener("click", () => { LOADERS.transactions().catch(e => toast("error", errorText(e))); });
+["tx-account", "tx-category", "tx-object", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
+$("tx-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { LOADERS.transactions().catch(() => {}); } });
 $("tx-q").addEventListener("input", updateBulkBar);
-$("tx-prev").addEventListener("click", () => { txPage = Math.max(0, txPage - 1); LOADERS.transactions().catch(() => {}); });
-$("tx-next").addEventListener("click", () => { txPage += 1; LOADERS.transactions().catch(() => {}); });
 $("tx-detect").addEventListener("click", detectTransfers);
 $("st-detect").addEventListener("click", detectTransfers);
 async function detectTransfers() {
