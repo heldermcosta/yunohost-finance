@@ -27,6 +27,7 @@ from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, WrongA
 from .models import (Account, AccountShare, Budget, Category, PdfPassword, PortfolioSnapshot, Rule, Statement,
                      Transaction, User)
 from .parsers import NoParserError
+from .reimport import ReimportRefused, reimport_from_pdf
 from .transfers import detect_transfers, link, unlink
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -503,6 +504,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         data = read_pdf(statement, key, settings.pdf_dir)
         return Response(content=data, media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{statement.original_name}"'})
+
+    @app.post("/api/statements/{statement_id}/reimport")
+    def reimport_statement(
+        statement_id: int,
+        apply: bool = False,
+        user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
+    ) -> dict:
+        """Read a stored statement again. Without apply=true nothing is written; see app/reimport.py."""
+        statement = session.get(Statement, statement_id)
+        if statement is None:
+            raise HTTPException(status_code=404, detail="statement not found")
+        account = account_for_read(session, user, statement.account_id)
+        if not access.is_owner(user, account):
+            raise HTTPException(status_code=403, detail="only the owner can reimport a statement")
+        data = read_pdf(statement, key, settings.pdf_dir)
+        try:
+            return reimport_from_pdf(
+                session, statement, data, saved_passwords(session, user), user_rules(session, user),
+                settings.work_dir, apply,
+            )
+        except ReimportRefused as exc:
+            raise _err(422, "reimport_refused", str(exc))
+        except PasswordRequired:
+            raise _err(422, "password_required", "This PDF is password protected.")
+        except NoParserError:
+            raise _err(422, "no_parser", "No parser recognises this statement.")
 
     # ---- transactions -----------------------------------------------------------
 

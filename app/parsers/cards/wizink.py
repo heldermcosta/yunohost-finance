@@ -198,3 +198,66 @@ def parse_wizink(text, filename):
         'transactions': transactions,
         'anomalies': anomalies,
     }
+
+
+BARE_AMOUNT_TEXT_RE = re.compile(r'^(-?\d{1,3}(?:\.\d{3})*,\d{2}) €$')
+AMOUNT_TOKEN_RE = re.compile(r'^-?\d{1,3}(?:\.\d{3})*,\d{2}$')
+DATE_TOKEN_RE = re.compile(r'^\d{2}/\d{2}$')
+OCR_ROW_RE = re.compile(r'(\d{2}/\d{2})\s+(\d{2}/\d{2})\s+(.+)$')  # OCR can add a stray letter before the date
+
+
+def repair_bare_rows(layout_text, pdf_path, password):
+    """Read the date and description of rows whose text layer holds only the amount.
+
+    Some WiZink rows are drawn with their date and description as a bitmap, so
+    `pdftotext -layout` gives just the amount on that line. The same amount is found
+    in the word-position text, cropped from the page and read with OCR. Only a
+    row whose OCR gives both dates and a description is changed; anything else is
+    left exactly as it was. Amounts are matched in page order.
+    """
+    from ..pdfpos import ocr_crop, positional_lines
+
+    # Amounts printed alone inside the transaction table, in reading order. The table
+    # is found the same way parse_wizink finds it: from the header line to an end marker.
+    amount_boxes = []  # (page, y_min, y_max, x_min, amount_text)
+    in_table = False
+    for line in positional_lines(pdf_path, password):
+        if HEADER_ANCHOR_RE.search(line.text):
+            in_table = True
+            continue
+        if any(line.text.startswith(m) or m in line.text for m in END_MARKERS):
+            in_table = False
+            continue
+        if not in_table or any(DATE_TOKEN_RE.match(w[4]) for w in line.words):
+            continue
+        for k in range(len(line.words) - 1):
+            x0, _x1, y0, y1, token = line.words[k]
+            if line.words[k + 1][4] == '€' and AMOUNT_TOKEN_RE.match(token):
+                amount_boxes.append((line.page, y0, y1, x0, token))
+
+    out = []
+    cursor = 0
+    in_table = False
+    for raw in layout_text.split('\n'):
+        stripped = raw.strip()
+        if HEADER_ANCHOR_RE.search(stripped):
+            in_table = True
+        elif any(stripped.startswith(m) or m in stripped for m in END_MARKERS):
+            in_table = False
+        bare = BARE_AMOUNT_RE.match(stripped) if in_table else None
+        if bare:
+            amount_text = bare.group(1)
+            match_idx = next(
+                (k for k in range(cursor, len(amount_boxes)) if amount_boxes[k][4] == amount_text),
+                None,
+            )
+            if match_idx is not None:
+                cursor = match_idx + 1
+                page, y0, y1, x0, _token = amount_boxes[match_idx]
+                ocr = ocr_crop(pdf_path, page, 0, x0 - 2, y0 - 6, y1 + 6, password)
+                m = OCR_ROW_RE.search(ocr)
+                if m:
+                    indent = raw[:len(raw) - len(raw.lstrip())]
+                    raw = f"{indent}{m.group(1)} {m.group(2)} {m.group(3).strip()} {stripped}"
+        out.append(raw)
+    return '\n'.join(out)

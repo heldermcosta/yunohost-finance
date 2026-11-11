@@ -27,7 +27,7 @@ from .categories import categorize, is_card_payment, rule_object
 from .models import Account, PortfolioSnapshot, Statement, Transaction
 from .parsers import INSTITUTION_NAMES, find_parser
 from .parsers.base import reconcile
-from .parsers.pdftext import PdfPasswordError, extract_layout_text
+from .parsers.pdftext import PdfPasswordError, PdfTextError, extract_layout_text
 
 
 class DuplicateStatement(Exception):
@@ -77,6 +77,30 @@ def _pdf_to_text(pdf_bytes: bytes, work_dir: Path, password: str | None = None) 
         with os.fdopen(fd, "wb") as handle:
             handle.write(pdf_bytes)
         return extract_layout_text(path, password)
+    finally:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
+def repair_text(parser, text: str, pdf_bytes: bytes, work_dir: Path, password: str | None) -> str:
+    """Let the parser fill in what the layout text leaves out, reading the PDF itself.
+
+    Parsers without a `repair_text` method get the layout text unchanged. A repair
+    that cannot read the PDF keeps the layout text, so the import still goes ahead.
+    """
+    repair = getattr(parser, "repair_text", None)
+    if repair is None:
+        return text
+    work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, path = tempfile.mkstemp(dir=work_dir, suffix=".pdf")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(pdf_bytes)
+        return repair(text, path, password)
+    except PdfTextError:
+        return text
     finally:
         try:
             os.unlink(path)
@@ -154,6 +178,7 @@ def import_pdf(
 
     text, password_used = extract_text(pdf_bytes, work_dir, password_candidates)
     parser = find_parser(text)  # raises NoParserError if no parser recognises it
+    text = repair_text(parser, text, pdf_bytes, work_dir, password_used)
 
 
     parsed = parser.parse(text)
@@ -167,6 +192,21 @@ def import_pdf(
     notes = list(parsed.anomalies) + list(result.row_warnings)
     if result.status == "failed":
         notes.insert(0, f"closing balance differs by {result.difference}")
+    # Two statements of one account covering the same days would count the same movements twice.
+    # The file is still imported (the person decides); the overlap is only noted.
+    if account is not None:
+        overlapping = (
+            session.query(Statement)
+            .filter(Statement.account_id == account.id,
+                    Statement.period_start <= parsed.period_end,
+                    Statement.period_end >= parsed.period_start)
+            .order_by(Statement.id)
+            .all()
+        )
+        for other in overlapping:
+            notes.insert(0, (f"overlaps statement {other.id} ({other.original_name}, "
+                             f"{other.period_start.isoformat()} to {other.period_end.isoformat()}): "
+                             "check that the same movements are not counted twice"))
 
     # Store the PDF first, so a database row never points at a missing file.
     pdf_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -198,25 +238,7 @@ def import_pdf(
         ))
 
     for t in parsed.transactions:
-        category, source = categorize(t.description, t.amount, user_rules)
-        object_name = rule_object(t.description, user_rules)
-        card_payment = is_card_payment(t.description, t.amount, parser.institution)
-        if card_payment:
-            category, source = "Card payments", "default"
-        session.add(
-            Transaction(
-                statement_id=statement.id,
-                account_id=account.id,
-                booked_on=t.booked_on,
-                value_date=t.value_date,
-                description=t.description[:255],
-                amount=t.amount,
-                balance=t.balance,
-                category=category,
-                category_source=source, object_name=object_name,
-                is_transfer=card_payment,
-            )
-        )
+        session.add(new_transaction(statement.id, account.id, parser.institution, t, user_rules))
     session.commit()
 
     return ImportResult(
@@ -227,6 +249,27 @@ def import_pdf(
         difference=str(result.difference),
         notes=notes[:20],
         pdf_password=password_used,
+    )
+
+
+def new_transaction(statement_id: int, account_id: int, institution: str, t, user_rules) -> Transaction:
+    """A stored transaction for one parsed row, categorised by the rules and built-in keywords."""
+    category, source = categorize(t.description, t.amount, user_rules)
+    object_name = rule_object(t.description, user_rules)
+    card_payment = is_card_payment(t.description, t.amount, institution)
+    if card_payment:
+        category, source = "Card payments", "default"
+    return Transaction(
+        statement_id=statement_id,
+        account_id=account_id,
+        booked_on=t.booked_on,
+        value_date=t.value_date,
+        description=t.description[:255],
+        amount=t.amount,
+        balance=t.balance,
+        category=category,
+        category_source=source, object_name=object_name,
+        is_transfer=card_payment,
     )
 
 

@@ -27,6 +27,12 @@ INSTITUTION = "activobank"
 # A trailing "-" marks a negative balance (overdraft), e.g. "62 809.11-".
 AMT_RE = re.compile(r"-?\d{1,3}(?:\s\d{3})*\.\d{2}-?")
 DATE_LEAD_RE = re.compile(r"^\s*(\d{1,2}\.\d{1,2})\s+(\d{1,2}\.\d{1,2})\s")
+# A whole movement row read by position: two dates, description, amount, balance.
+ROW_TEXT_RE = re.compile(
+    r"(?<![\d.])(\d{1,2}\.\d{1,2})\s+(\d{1,2}\.\d{1,2})\s+(.+?)\s+"
+    r"(-?\d{1,3}(?:\s\d{3})*\.\d{2}-?)\s+(-?\d{1,3}(?:\s\d{3})*\.\d{2}-?)\s*$",
+    re.MULTILINE,
+)
 EXTRATO_DE_RE = re.compile(
     r"EXTRATO DE\s+(\d{4})/(\d{2})/(\d{2})\s+A\s+(\d{4})/(\d{2})/(\d{2})"
 )
@@ -67,8 +73,59 @@ def _to_date(md: str, start: date, end: date) -> date:
     return date(year, month, day)
 
 
+def repair_blank_descriptions(layout_text: str, positional_texts: list[str]) -> str:
+    """Put back descriptions that the layout text printed on a separate line.
+
+    A movement row whose description sits on another text line comes out of
+    `pdftotext -layout` with two empty columns between its dates and its
+    amount. The same row, read by position, has its description on the same
+    visual line. For each such row, the description is written into the blank
+    space of the layout line, character for character, so the column positions
+    the parser depends on do not move. A row is only changed if the amounts it
+    contains are exactly the same afterwards.
+    """
+    by_key: dict[tuple[str, str, str, str], list[str]] = {}
+    for text in positional_texts:
+        for m in ROW_TEXT_RE.finditer(text):
+            key = (m.group(1), m.group(2), m.group(4), m.group(5))
+            by_key.setdefault(key, []).append(m.group(3).strip())
+
+    out_lines = []
+    for line in layout_text.split("\n"):
+        dm = DATE_LEAD_RE.match(line)
+        matches = list(AMT_RE.finditer(line)) if dm else []
+        if not dm or len(matches) != 4:
+            out_lines.append(line)
+            continue
+        if line[matches[1].end():matches[-2].start()].strip():
+            out_lines.append(line)  # already has a description
+            continue
+        key = (dm.group(1), dm.group(2), matches[-2].group(), matches[-1].group())
+        candidates = by_key.get(key, [])
+        if len(set(candidates)) != 1 or not candidates[0]:
+            out_lines.append(line)  # unknown or ambiguous: leave the row as it is
+            continue
+        start, end = matches[1].end(), matches[-2].start()
+        room = end - start - 1
+        description = candidates[0][:room]
+        filled = (" " + description).ljust(end - start)
+        new_line = line[:start] + filled + line[end:]
+        if [m.group() for m in AMT_RE.finditer(new_line)] != [m.group() for m in matches]:
+            out_lines.append(line)
+            continue
+        out_lines.append(new_line)
+    return "\n".join(out_lines)
+
+
 class ActivoBankParser:
     institution = INSTITUTION
+
+    def repair_text(self, layout_text: str, pdf_path, password: str | None) -> str:
+        """Fill in descriptions printed on a separate line (see repair_blank_descriptions)."""
+        from .pdfpos import positional_lines
+
+        positional = [line.text for line in positional_lines(pdf_path, password)]
+        return repair_blank_descriptions(layout_text, positional)
 
     def can_parse(self, text: str) -> bool:
         return EXTRATO_DE_RE.search(text) is not None
