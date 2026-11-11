@@ -3,7 +3,7 @@ packaging_format = 2
 id = "finance"
 name = "Finance"
 description.en = "Self-hosted personal finance: statement import, reconciliation and analytics"
-version = "0.3.15~ynh1"
+version = "0.3.16~ynh1"
 maintainers = ["heldermcosta"]
 
 [upstream]
@@ -36,9 +36,9 @@ ram.runtime = "200M"
 
 [resources]
     [resources.sources.main]
-    # Source archive of commit 05089c4a71e6dda069dfbb64080b5d332efd5f96 on main (public repository).
-    url = "https://github.com/heldermcosta/yunohost-finance/archive/05089c4a71e6dda069dfbb64080b5d332efd5f96.tar.gz"
-    sha256 = "e5a0e141e08f7d1e90d1201d1886dacca023dc42d72397396c8d38057bb1fb5e"
+    # Source archive of commit 0bc1f0412d73e3005fea4827d5b81c60d265ffc3 on main (public repository).
+    url = "https://github.com/heldermcosta/yunohost-finance/archive/0bc1f0412d73e3005fea4827d5b81c60d265ffc3.tar.gz"
+    sha256 = "25359a1239bba42a0399da39de5da108e693072c36f50799b2961492e7658f92"
 
     [resources.system_user]
 
