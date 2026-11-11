@@ -3,7 +3,7 @@ packaging_format = 2
 id = "finance"
 name = "Finance"
 description.en = "Self-hosted personal finance: statement import, reconciliation and analytics"
-version = "0.1.0~ynh2"
+version = "0.1.1~ynh1"
 maintainers = ["heldermcosta"]
 
 [upstream]
@@ -38,7 +38,7 @@ ram.runtime = "200M"
 [resources]
     [resources.sources.main]
     # GitHub release archive for tag v0.1.0 (repository is public).
-    url = "https://github.com/heldermcosta/yunohost-finance/archive/refs/tags/v0.1.0.tar.gz"
+    url = "https://github.com/heldermcosta/yunohost-finance/archive/refs/tags/v0.1.1.tar.gz"
     sha256 = "3a905d79271c157b111ae6601feeca7f7a8aa161c0d43123fe736f964466b995"
 
     [resources.system_user]

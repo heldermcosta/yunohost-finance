@@ -61,7 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     key = crypto.load_or_create_key(settings.key_file)
 
-    app = FastAPI(title="yunohost-finance", version="0.1.0")
+    app = FastAPI(title="yunohost-finance", version="0.1.1")
     app.state.settings = settings
 
     def get_session():
