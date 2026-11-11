@@ -37,9 +37,9 @@ ram.runtime = "200M"
 
 [resources]
     [resources.sources.main]
-    # GitHub release archive for tag v0.1.1 (repository is public).
-    url = "https://github.com/heldermcosta/yunohost-finance/archive/refs/tags/v0.2.0.tar.gz"
-    sha256 = "0e6f31ca8e2511b2713e23798b50fb9a67390f5d1675f6bf0c27e2d1cb0959da"
+    # Source archive of commit 97e3669cc2d97f7d64693d8883caa204ece6294a on main (public repository).
+    url = "https://github.com/heldermcosta/yunohost-finance/archive/97e3669cc2d97f7d64693d8883caa204ece6294a.tar.gz"
+    sha256 = "d42b15529182cdea6099fca4fa539afa55e698474b73861dd2579ac3f1efba6e"
 
     [resources.system_user]
 
