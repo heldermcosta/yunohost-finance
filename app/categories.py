@@ -93,11 +93,20 @@ def is_card_payment(description: str, amount: Decimal, bank_institution: str) ->
             and any(h in (description or "").upper() for h in CARD_COMPANY_HINTS))
 
 
+def rule_object(description: str, user_rules: list | None = None) -> str | None:
+    """The object of the first saved rule that matches, if that rule sets one."""
+    text = (description or "").upper()
+    for contains, _category, *rest in user_rules or []:
+        if contains.upper() in text:
+            return rest[0] if rest and rest[0] else None
+    return None
+
+
 def categorize(description: str, amount: Decimal | None = None,
                user_rules: list[tuple[str, str]] | None = None) -> tuple[str, str]:
     """Returns (category, source). Source is "rule" for a saved rule, "default" for built-in keywords."""
     text = (description or "").upper()
-    for contains, category in user_rules or []:
+    for contains, category, *_ in user_rules or []:
         if contains.upper() in text:
             return category, "rule"
     for category, keywords in RULES:

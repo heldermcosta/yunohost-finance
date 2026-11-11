@@ -95,6 +95,8 @@ class Transaction(Base):
     category_source: Mapped[str] = mapped_column(String(10), default="default")
     is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
     transfer_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # What the transaction is about: a house, a car, a person. Free text, per owner's choice.
+    object_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
 
 class Category(Base):
@@ -113,6 +115,7 @@ class Rule(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     contains: Mapped[str] = mapped_column(String(120))
     category: Mapped[str] = mapped_column(String(60))
+    object_name: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
 
 class Budget(Base):

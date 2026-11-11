@@ -172,6 +172,7 @@ details.cat ul { margin: 4px 0 8px 18px; padding: 0; }
     <div class="row">
       <div><label for="tx-account" data-i18n="account">Account</label><select id="tx-account"></select></div>
       <div><label for="tx-category" data-i18n="category">Category</label><select id="tx-category"></select></div>
+      <div><label for="tx-object" data-i18n="object">Object</label><input id="tx-object" list="objects-list"></div>
       <div><label for="tx-transfers" data-i18n="transfers">Transfers</label>
         <select id="tx-transfers">
           <option value="include" data-i18n="incl">Include</option>
@@ -193,6 +194,7 @@ details.cat ul { margin: 4px 0 8px 18px; padding: 0; }
     <div class="row">
       <div><label id="tx-sel-count"></label></div>
       <div><label for="tx-bulk-cat" data-i18n="category">Category</label><select id="tx-bulk-cat"></select></div>
+      <div><label for="tx-bulk-object" data-i18n="object">Object</label><input id="tx-bulk-object" list="objects-list"></div>
       <div class="wide"><label for="tx-bulk-rule" data-i18n="bulk_rule_text">Also save a rule for this text (optional)</label><input id="tx-bulk-rule"></div>
       <div class="auto"><button class="primary" id="tx-bulk-apply" data-i18n="bulk_apply">Apply to selected</button></div>
       <div class="auto"><button id="tx-bulk-clear" data-i18n="bulk_clear">Clear selection</button></div>
@@ -291,6 +293,7 @@ details.cat ul { margin: 4px 0 8px 18px; padding: 0; }
       <div class="auto"><label><input type="checkbox" id="ac-household"> <span data-i18n="household">Household account</span></label></div>
       <div class="auto"><button class="primary" id="ac-create" data-i18n="create">Create</button></div>
     </div>
+    <datalist id="objects-list"></datalist>
     <datalist id="institutions"><option value="activobank"><option value="bankinter"><option value="affinity"><option value="wizink"><option value="cofidis"><option value="universo"><option value="cetelem"></datalist>
   </div>
 </section>
@@ -380,7 +383,7 @@ en: {
   budget_none:"No budgets yet. Add one below.", budget_spent:"{spent} of {limit}", budget_over:"over", budget_near:"near",
   delete_category_confirm:"Delete category \"{name}\"? Its transactions become Uncategorised and its rules and budgets are removed.",
   delete_account_confirm:"Delete this account? Only possible when it has no statements.", delete_rule_confirm:"Delete this rule?",
-  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", ignored_title:"Words to ignore when grouping", ignored_note:"Bank prefixes such as \"PAG SERV\" are removed before descriptions are compared, so the merchant after them is used. One term per line.", ig_saved:"Ignored words saved.", tab_categorise:"Categorise", cg_title:"Categorise uncategorised transactions", cg_note:"Grouped by merchant, most frequent first. Choose a category for a group to set it on all its transactions.", cg_count:"{n} uncategorised transactions in {g} groups", cg_none:"Nothing left to categorise.", cg_choose:"Choose category", cg_save_rule:"Save as rule", cg_apply:"Apply", cg_skip:"Skip", cg_confirm:"Set \"{c}\" on {n} transactions?", cg_col_count:"Count", cg_col_merchant:"Merchant", cg_col_total:"Total", cg_col_category:"Category", cg_in_group:"In group", cg_date:"Date", cg_description:"Description", cg_amount:"Amount", cg_none_selected:"Select at least one transaction in the group.", st_filter_account:"All accounts", st_filter_status:"All statuses", st_filter_search:"Search file name", st_select_all:"Select all shown", st_delete_selected:"Delete selected ({n})", st_bulk_confirm:"Delete {n} statement(s), their PDFs and all their transactions?", st_bulk_done:"Deleted {n}. Skipped {s} you do not own.", st_none_match:"No statements match these filters.", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
+  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", ignored_title:"Words to ignore when grouping", ignored_note:"Bank prefixes such as \"PAG SERV\" are removed before descriptions are compared, so the merchant after them is used. One term per line.", ig_saved:"Ignored words saved.", object:"Object", object_hint:"House, car, person…", tab_categorise:"Categorise", cg_title:"Categorise uncategorised transactions", cg_note:"Grouped by merchant, most frequent first. Choose a category for a group to set it on all its transactions.", cg_count:"{n} uncategorised transactions in {g} groups", cg_none:"Nothing left to categorise.", cg_choose:"Choose category", cg_save_rule:"Save as rule", cg_apply:"Apply", cg_skip:"Skip", cg_confirm:"Set \"{c}\" on {n} transactions?", cg_col_count:"Count", cg_col_merchant:"Merchant", cg_col_total:"Total", cg_col_category:"Category", cg_in_group:"In group", cg_date:"Date", cg_description:"Description", cg_amount:"Amount", cg_none_selected:"Select at least one transaction in the group.", st_filter_account:"All accounts", st_filter_status:"All statuses", st_filter_search:"Search file name", st_select_all:"Select all shown", st_delete_selected:"Delete selected ({n})", st_bulk_confirm:"Delete {n} statement(s), their PDFs and all their transactions?", st_bulk_done:"Deleted {n}. Skipped {s} you do not own.", st_none_match:"No statements match these filters.", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
   scope_saved:"Saved", detect_done:"{n} transfer pairs found", not_signed_in:"Not signed in",
   err_too_large:"The file is larger than 20 MB.", err_not_pdf:"This is not a PDF file.", err_no_parser:"No parser recognises this statement yet.",
   err_wrong_institution:"This statement is from another bank than the account.", err_wrong_account:"This statement belongs to another account.",
@@ -421,7 +424,7 @@ pt: {
   budget_none:"Ainda não há orçamentos. Adicione um abaixo.", budget_spent:"{spent} de {limit}", budget_over:"excedido", budget_near:"perto",
   delete_category_confirm:"Apagar a categoria \"{name}\"? Os movimentos ficam sem categoria e as regras e orçamentos são removidos.",
   delete_account_confirm:"Apagar esta conta? Só é possível sem extratos.", delete_rule_confirm:"Apagar esta regra?",
-  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", ignored_title:"Palavras a ignorar ao agrupar", ignored_note:"Prefixos do banco, como \"PAG SERV\", são retirados antes de comparar descrições, por isso usa-se o comerciante que vem depois. Um termo por linha.", ig_saved:"Palavras ignoradas guardadas.", tab_categorise:"Categorizar", cg_title:"Categorizar movimentos sem categoria", cg_note:"Agrupados por comerciante, do mais frequente para o menos. Escolha uma categoria para um grupo e ela aplica-se a todos os seus movimentos.", cg_count:"{n} movimentos sem categoria em {g} grupos", cg_none:"Não há mais movimentos para categorizar.", cg_choose:"Escolher categoria", cg_save_rule:"Guardar como regra", cg_apply:"Aplicar", cg_skip:"Saltar", cg_confirm:"Definir \"{c}\" em {n} movimentos?", cg_col_count:"Nº", cg_col_merchant:"Comerciante", cg_col_total:"Total", cg_col_category:"Categoria", cg_in_group:"No grupo", cg_date:"Data", cg_description:"Descrição", cg_amount:"Valor", cg_none_selected:"Selecione pelo menos um movimento do grupo.", st_filter_account:"Todas as contas", st_filter_status:"Todos os estados", st_filter_search:"Pesquisar nome do ficheiro", st_select_all:"Selecionar os visíveis", st_delete_selected:"Apagar selecionados ({n})", st_bulk_confirm:"Apagar {n} extrato(s), os seus PDFs e todos os movimentos?", st_bulk_done:"Apagados {n}. Ignorados {s} que não são seus.", st_none_match:"Nenhum extrato corresponde a estes filtros.", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
+  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", ignored_title:"Palavras a ignorar ao agrupar", ignored_note:"Prefixos do banco, como \"PAG SERV\", são retirados antes de comparar descrições, por isso usa-se o comerciante que vem depois. Um termo por linha.", ig_saved:"Palavras ignoradas guardadas.", object:"Objeto", object_hint:"Casa, carro, pessoa…", tab_categorise:"Categorizar", cg_title:"Categorizar movimentos sem categoria", cg_note:"Agrupados por comerciante, do mais frequente para o menos. Escolha uma categoria para um grupo e ela aplica-se a todos os seus movimentos.", cg_count:"{n} movimentos sem categoria em {g} grupos", cg_none:"Não há mais movimentos para categorizar.", cg_choose:"Escolher categoria", cg_save_rule:"Guardar como regra", cg_apply:"Aplicar", cg_skip:"Saltar", cg_confirm:"Definir \"{c}\" em {n} movimentos?", cg_col_count:"Nº", cg_col_merchant:"Comerciante", cg_col_total:"Total", cg_col_category:"Categoria", cg_in_group:"No grupo", cg_date:"Data", cg_description:"Descrição", cg_amount:"Valor", cg_none_selected:"Selecione pelo menos um movimento do grupo.", st_filter_account:"Todas as contas", st_filter_status:"Todos os estados", st_filter_search:"Pesquisar nome do ficheiro", st_select_all:"Selecionar os visíveis", st_delete_selected:"Apagar selecionados ({n})", st_bulk_confirm:"Apagar {n} extrato(s), os seus PDFs e todos os movimentos?", st_bulk_done:"Apagados {n}. Ignorados {s} que não são seus.", st_none_match:"Nenhum extrato corresponde a estes filtros.", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
   scope_saved:"Guardado", detect_done:"{n} pares de transferências encontrados", not_signed_in:"Sessão não iniciada",
   err_too_large:"O ficheiro tem mais de 20 MB.", err_not_pdf:"Não é um ficheiro PDF.", err_no_parser:"Ainda não há leitor para este extrato.",
   err_wrong_institution:"Este extrato é de outro banco que não o da conta.", err_wrong_account:"Este extrato pertence a outra conta.",
@@ -755,7 +758,8 @@ let txPage = 0; const PAGE = 100; let txTotal = 0;
 function txQuery(offset) {
   const p = new URLSearchParams();
   const map = { account_id: $("tx-account").value, category: $("tx-category").value, transfers: $("tx-transfers").value,
-                q: $("tx-q").value.trim(), start: $("tx-start").value, end: $("tx-end").value };
+                q: $("tx-q").value.trim(), start: $("tx-start").value, end: $("tx-end").value,
+                object_name: $("tx-object").value.trim() };
   for (const [k, v] of Object.entries(map)) if (v) p.set(k, v);
   p.set("limit", PAGE); p.set("offset", offset);
   return p.toString();
@@ -768,8 +772,12 @@ function updateBulkBar() {
   const q = $("tx-q").value.trim();
   $("tx-by-text").classList.toggle("hidden", q.length < 2);
 }
+async function loadObjects() {
+  const names = await api("objects");
+  $("objects-list").replaceChildren(...names.map(n => el("option", { value: n })));
+}
 LOADERS.transactions = async () => {
-  await loadAccounts(); await loadCategories();
+  await loadAccounts(); await loadCategories(); loadObjects().catch(() => {});
   const data = await api("transactions?" + txQuery(txPage * PAGE));
   txTotal = data.total;
   $("tx-count").textContent = (lang === "pt" ? `${txTotal} movimentos` : `${txTotal} transactions`);
@@ -807,7 +815,7 @@ LOADERS.transactions = async () => {
     return el("tr", { class: tx.is_transfer ? "transfer" : "" }, [
       el("td", {}, box),
       el("td", { text: tx.booked_on }),
-      el("td", { class: "desc", text: tx.description }),
+      el("td", { class: "desc" }, [tx.description, tx.object_name ? el("div", { class: "muted", text: tx.object_name }) : null]),
       el("td", { class: "cat" }, catSelect),
       el("td", { text: tx.account }),
       el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
@@ -834,7 +842,7 @@ $("tx-bulk-apply").addEventListener("click", async () => {
   const ok = await confirmBox(lang === "pt" ? `Definir "${category}" em ${ids.length} movimentos?` : `Set "${category}" on ${ids.length} transactions?`);
   if (!ok) return;
   try {
-    const r = await api("transactions/bulk-category", { method: "POST", json: { ids, category, save_rule: rule.length >= 2 ? rule : null } });
+    const r = await api("transactions/bulk-category", { method: "POST", json: { ids, category, save_rule: rule.length >= 2 ? rule : null, object_name: $("tx-bulk-object").value.trim() || null } });
     toast("success", t("bulk_updated", { n: r.updated }), rule.length >= 2 ? t("rule_saved") : "");
     selected.clear(); $("tx-bulk-rule").value = "";
     LOADERS.transactions();
@@ -902,7 +910,7 @@ async function changeCategory(tx, category) {
 }
 
 $("tx-apply").addEventListener("click", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); });
-["tx-account", "tx-category", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
+["tx-account", "tx-category", "tx-object", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
 $("tx-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { txPage = 0; LOADERS.transactions().catch(() => {}); } });
 $("tx-q").addEventListener("input", updateBulkBar);
 $("tx-prev").addEventListener("click", () => { txPage = Math.max(0, txPage - 1); LOADERS.transactions().catch(() => {}); });
@@ -1205,12 +1213,13 @@ const cgOpen = new Set();
 const cgExcluded = new Map(); // group key -> ids left out of the group
 const cgCategory = new Map(); // group key -> category typed for it
 const cgRule = new Map();     // group key -> save-as-rule choice
+const cgObject = new Map();   // group key -> object typed for it
 let cgGroups = [];
 let cgTotal = 0;
 const cgChosen = g => { const out = cgExcluded.get(g.key) || new Set(); return g.items.filter(i => !out.has(i.id)).map(i => i.id); };
 
 LOADERS.categorise = async () => {
-  await loadCategories();
+  await loadCategories(); loadObjects().catch(() => {});
   const data = await api("uncategorised/groups?limit=300");
   cgTotal = data.total;
   cgGroups = data.groups.filter(g => !cgSkipped.has(g.key));
@@ -1225,7 +1234,7 @@ function renderCategorise() {
   const categoryPicker = () => el("input", { type: "text", list: "cg-categories", placeholder: t("cg_choose"), autocomplete: "off", class: "cg-cat" });
   const categoryList = el("datalist", { id: "cg-categories" }, cache.categories.map(c => el("option", { value: c })));
 
-  const detailRow = (g) => el("tr", {}, el("td", { colspan: 6 }, el("table", {}, [
+  const detailRow = (g) => el("tr", {}, el("td", { colspan: 7 }, el("table", {}, [
     el("thead", {}, el("tr", {}, [t("cg_in_group"), t("cg_date"), t("cg_description"), t("cg_amount")].map(h => el("th", { text: h })))),
     el("tbody", {}, g.items.map(i => el("tr", {}, [
       el("td", {}, el("input", { type: "checkbox", checked: !(cgExcluded.get(g.key) || new Set()).has(i.id),
@@ -1246,6 +1255,9 @@ function renderCategorise() {
     const cat = categoryPicker();
     cat.value = cgCategory.get(g.key) || "";
     cat.addEventListener("input", () => cgCategory.set(g.key, cat.value));
+    const obj = el("input", { type: "text", list: "objects-list", placeholder: t("object"), autocomplete: "off" });
+    obj.value = cgObject.get(g.key) || "";
+    obj.addEventListener("input", () => cgObject.set(g.key, obj.value));
     const rule = el("input", { type: "checkbox", checked: cgRule.has(g.key) ? cgRule.get(g.key) : g.key.length >= 2 });
     rule.addEventListener("change", () => cgRule.set(g.key, rule.checked));
     const apply = el("button", { class: "small", text: t("cg_apply"), on: { click: async () => {
@@ -1257,12 +1269,12 @@ function renderCategorise() {
         let updated = 0;
         for (let i = 0; i < ids.length; i += 2000) {
           const r = await api("transactions/bulk-category", { method: "POST", json: {
-            ids: ids.slice(i, i + 2000), category: cat.value,
+            ids: ids.slice(i, i + 2000), category: cat.value, object_name: obj.value.trim() || null,
             save_rule: rule.checked && i === 0 && g.key.length >= 2 ? g.key : null } });
           updated += r.updated;
         }
         toast("success", t("bulk_updated", { n: updated }));
-        cgExcluded.delete(g.key); cgCategory.delete(g.key); cgRule.delete(g.key);
+        cgExcluded.delete(g.key); cgCategory.delete(g.key); cgRule.delete(g.key); cgObject.delete(g.key);
         LOADERS.categorise();
       } catch (e) { toast("error", errorText(e)); }
     } } });
@@ -1276,6 +1288,7 @@ function renderCategorise() {
       el("td", {}, [el("strong", { text: g.key }), el("div", { class: "muted desc", text: g.examples.join(" · ") })]),
       el("td", { text: g.total }),
       el("td", {}, cat),
+      el("td", {}, obj),
       el("td", {}, el("label", {}, [rule, " " + t("cg_save_rule")])),
       el("td", {}, [apply, " ", skip]),
     ]);
@@ -1283,7 +1296,7 @@ function renderCategorise() {
   };
 
   $("cg-list").replaceChildren(categoryList, el("table", {}, [
-    el("thead", {}, el("tr", {}, [t("cg_col_count"), t("cg_col_merchant"), t("cg_col_total"), t("cg_col_category"), "", ""].map(h => el("th", { text: h })))),
+    el("thead", {}, el("tr", {}, [t("cg_col_count"), t("cg_col_merchant"), t("cg_col_total"), t("cg_col_category"), t("object"), "", ""].map(h => el("th", { text: h })))),
     el("tbody", {}, cgGroups.flatMap(groupRow)),
   ]));
 }

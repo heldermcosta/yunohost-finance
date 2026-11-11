@@ -22,7 +22,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .categories import categorize, is_card_payment
+from .categories import categorize, is_card_payment, rule_object
 from .models import Account, Statement, Transaction
 from .parsers import INSTITUTION_NAMES, find_parser
 from .parsers.base import reconcile
@@ -142,7 +142,7 @@ def import_pdf(
     owner_accounts: list[Account],
     uploaded_by_id: int,
     password_candidates: list[str],
-    user_rules: list[tuple[str, str]],
+    user_rules: list[tuple[str, str, str | None]],
     pdf_dir: Path,
     work_dir: Path,
 ) -> ImportResult:
@@ -191,6 +191,7 @@ def import_pdf(
 
     for t in parsed.transactions:
         category, source = categorize(t.description, t.amount, user_rules)
+        object_name = rule_object(t.description, user_rules)
         card_payment = is_card_payment(t.description, t.amount, parser.institution)
         if card_payment:
             category, source = "Card payments", "default"
@@ -204,7 +205,7 @@ def import_pdf(
                 amount=t.amount,
                 balance=t.balance,
                 category=category,
-                category_source=source,
+                category_source=source, object_name=object_name,
                 is_transfer=card_payment,
             )
         )
