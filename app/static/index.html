@@ -188,6 +188,46 @@ tr.total:hover td { background: var(--card-2); }
 .dual input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--focus); }
 #ov-range-label { margin: 10px 0 0; }
 
+/* PDF viewer: 90% of the screen, with download */
+.pdf-overlay { padding: 0; }
+.pdf-modal {
+  width: 90vw; height: 90vh; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-lg);
+}
+.pdf-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); min-width: 0; }
+.pdf-bar strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pdf-bar .actions { flex: 0 0 auto; }
+#pdf-frame { flex: 1; width: 100%; border: 0; background: var(--card-2); }
+@media (max-width: 720px) { .pdf-modal { width: 100vw; height: 100vh; border-radius: 0; } }
+
+/* Statement gallery: one block per year, twelve months each */
+.gl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+.gl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.gl-key { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid var(--line-strong); }
+.gl-key.ok { background: var(--ok-soft); border-color: var(--ok); }
+.gl-key.review { background: var(--warn-soft); border-color: var(--warn); }
+.gl-key.missing { background: var(--bad-soft); border: 1px dashed var(--bad); }
+.gl-key.out { background: transparent; border-style: dashed; }
+.gl-year { margin-top: 18px; }
+.gl-year h3 { margin: 0 0 8px; color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0; }
+.gl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.gl-cell {
+  min-height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--card-2);
+  padding: 8px 10px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;
+  font: inherit; color: var(--text); cursor: pointer; min-height: 64px;
+}
+.gl-cell:hover { border-color: var(--muted); }
+.gl-cell b { font-size: 13px; font-weight: 600; }
+.gl-cell small { font-size: 12px; color: var(--muted); }
+.gl-cell.ok { background: var(--ok-soft); border-color: transparent; }
+.gl-cell.ok small { color: var(--ok); }
+.gl-cell.review { background: var(--warn-soft); border-color: transparent; }
+.gl-cell.review small { color: var(--warn); }
+.gl-cell.missing { background: var(--bad-soft); border: 1px dashed var(--bad); cursor: pointer; }
+.gl-cell.missing small { color: var(--bad); font-size: 16px; line-height: 1; font-weight: 700; }
+.gl-cell.out { background: transparent; border-style: dashed; color: var(--muted); cursor: default; opacity: .55; }
+.gl-cell.out:hover { border-color: var(--line); }
+
 /* Column chart */
 .chart { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px; }
 .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
@@ -280,6 +320,7 @@ tr.cg-row td:first-child { width: 28px; }
     <button data-tab="categorise" data-i18n="tab_categorise">Categorise</button>
     <button data-tab="import" data-i18n="tab_import">Import</button>
     <button data-tab="review"><span data-i18n="tab_review">Review</span> <span id="review-count" class="badge hidden"></span></button>
+    <button data-tab="gallery" id="tab-btn-gallery">Gallery</button>
     <button data-tab="rules" data-i18n="tab_rules">Rules</button>
     <button data-tab="accounts" data-i18n="tab_accounts">Accounts</button>
     <button data-tab="settings" data-i18n="tab_settings">Settings</button>
@@ -529,10 +570,32 @@ tr.cg-row td:first-child { width: 28px; }
   </div>
 </section>
 
+  <section id="tab-gallery">
+    <div class="card">
+      <div class="row">
+        <div class="wide"><h2 id="gl-title">Statements</h2><p class="muted" id="gl-intro"></p></div>
+        <div class="auto"><label for="gl-account" id="gl-account-label">Account</label><select id="gl-account"></select></div>
+      </div>
+      <div class="gl-legend" id="gl-legend"></div>
+      <div id="gl-years"></div>
+    </div>
+  </section>
 </main>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="overlay" id="pdf-overlay" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
+  <div class="pdf-modal">
+    <div class="pdf-bar">
+      <strong id="pdf-title"></strong>
+      <div class="actions">
+        <button class="small primary" id="pdf-download" type="button">Download</button>
+        <button class="small" id="pdf-close" type="button">Close</button>
+      </div>
+    </div>
+    <iframe id="pdf-frame" title="Statement"></iframe>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -1070,22 +1133,122 @@ async function download(path, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   } catch (e) { toast("error", errorText(e)); }
 }
-// Opens the statement a transaction came from in a new tab.
-async function openStatementPdf(statementId) {
+// Full-screen PDF viewer with a download button. Fetches the statement through the API, so access is checked.
+let pdfUrl = null, pdfName = "statement.pdf";
+async function openStatementPdf(statementId, name) {
   try {
     const r = await fetch(API + `statements/${statementId}/pdf`, { credentials: "same-origin" });
     if (!r.ok) throw new Error(t("err_generic", { status: r.status }));
-    const url = URL.createObjectURL(await r.blob());
-    window.open(url, "_blank", "noopener");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    closePdfViewer();
+    pdfUrl = URL.createObjectURL(await r.blob());
+    pdfName = name || `statement-${statementId}.pdf`;
+    $("pdf-title").textContent = pdfName;
+    $("pdf-frame").src = pdfUrl;
+    $("pdf-overlay").classList.add("open");
+    $("pdf-close").focus();
   } catch (e) { toast("error", errorText(e)); }
 }
+function closePdfViewer() {
+  $("pdf-overlay").classList.remove("open");
+  $("pdf-frame").src = "about:blank";
+  if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = null; }
+}
+$("pdf-close").addEventListener("click", closePdfViewer);
+$("pdf-overlay").addEventListener("click", (e) => { if (e.target.id === "pdf-overlay") closePdfViewer(); });
+$("pdf-download").addEventListener("click", () => {
+  if (!pdfUrl) return;
+  const a = el("a", { href: pdfUrl, download: pdfName });
+  document.body.append(a); a.click(); a.remove();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("pdf-overlay").classList.contains("open")) closePdfViewer(); });
 const pdfButton = (statementId) => statementId
   ? el("button", { class: "small", type: "button", text: L("PDF", "PDF"), title: L("Open the statement this came from", "Abrir o extrato de origem"),
                    "aria-label": L("Open the statement this came from", "Abrir o extrato de origem"),
                    on: { click: () => openStatementPdf(statementId) } })
   : null;
 $("ex-csv").addEventListener("click", () => download("export/transactions.csv", "transactions.csv"));
+
+/* ---------- statement gallery ---------- */
+let glRows = [];
+function applyGalleryText() {
+  $("tab-btn-gallery").textContent = L("Gallery", "Galeria");
+  $("gl-title").textContent = L("Statement gallery", "Galeria de extratos");
+  $("gl-intro").textContent = L("One account at a time, by year and month. Click a month to open its statement. A ✕ marks a month with no statement between the first and last one.",
+                                 "Uma conta de cada vez, por ano e mês. Clique num mês para abrir o extrato. Um ✕ marca um mês sem extrato entre o primeiro e o último.");
+  $("gl-account-label").textContent = L("Account", "Conta");
+}
+function glCoverage(rows) {
+  // Each month covered by a statement of this account. An accepted statement wins over a review one.
+  const covers = new Map();
+  for (const s of rows) {
+    const first = s.period[0].slice(0, 7), last = s.period[1].slice(0, 7);
+    for (let i = 0; i <= monthsBetween(first, last); i++) {
+      const ym = addMonths(first, i);
+      const prev = covers.get(ym);
+      if (!prev || (prev.status !== "accepted" && s.status === "accepted")) covers.set(ym, s);
+    }
+  }
+  return covers;
+}
+function renderGallery() {
+  const accId = $("gl-account").value;
+  const rows = glRows.filter(s => String(s.account_id) === accId && (s.status === "accepted" || s.status === "review"));
+  const covers = glCoverage(rows);
+  const months = [...covers.keys()].sort();
+  if (!months.length) {
+    $("gl-legend").replaceChildren();
+    $("gl-years").replaceChildren(emptyState(L("No statements for this account", "Sem extratos nesta conta"),
+      L("Import a statement for this account and it will appear here.", "Importe um extrato desta conta e aparece aqui."),
+      L("Import statements", "Importar extratos")));
+    return;
+  }
+  const first = months[0], last = months[months.length - 1];
+  let missing = 0;
+  const years = [];
+  for (let y = Number(first.slice(0, 4)); y <= Number(last.slice(0, 4)); y++) years.push(y);
+  const legend = [
+    ["ok", L("Statement", "Extrato")], ["review", L("Waiting for review", "A aguardar revisão")],
+    ["missing", L("Missing", "Em falta")], ["out", L("Outside the range", "Fora do período")],
+  ];
+  $("gl-legend").replaceChildren(...legend.map(([cls, text]) => el("span", {}, [el("i", { class: "gl-key " + cls }), text])));
+  const grid = years.map(y => {
+    const cells = [];
+    for (let m = 1; m <= 12; m++) {
+      const ym = `${y}-${String(m).padStart(2, "0")}`;
+      const label = new Date(y, m - 1, 1).toLocaleDateString(lang === "pt" ? "pt-PT" : "en-GB", { month: "short" });
+      const s = covers.get(ym);
+      if (s) {
+        cells.push(el("button", { class: "gl-cell " + (s.status === "accepted" ? "ok" : "review"), type: "button",
+          title: `${s.original_name} · ${s.transactions} ${L("transactions", "movimentos")}`,
+          on: { click: () => openStatementPdf(s.id, s.original_name) } },
+          [el("b", { text: label }), el("small", { text: s.status === "accepted" ? "✓ " + s.transactions : L("Review", "Revisão") })]));
+      } else if (ym >= first && ym <= last) {
+        missing++;
+        cells.push(el("button", { class: "gl-cell missing", type: "button", title: L("No statement for this month. Import it.", "Sem extrato neste mês. Importe-o."),
+          on: { click: () => showTab("import") } },
+          [el("b", { text: label }), el("small", { text: "✕" })]));
+      } else {
+        cells.push(el("div", { class: "gl-cell out", "aria-hidden": "true" }, [el("b", { text: label })]));
+      }
+    }
+    return el("div", { class: "gl-year" }, [el("h3", { text: String(y) }), el("div", { class: "gl-grid" }, cells)]);
+  });
+  const summary = el("p", { class: "muted", text: missing
+    ? L(`${missing} month(s) missing between ${monthLabel(first)} and ${monthLabel(last)}.`, `${missing} mês(es) em falta entre ${monthLabel(first)} e ${monthLabel(last)}.`)
+    : L(`No gaps between ${monthLabel(first)} and ${monthLabel(last)}.`, `Sem falhas entre ${monthLabel(first)} e ${monthLabel(last)}.`) });
+  $("gl-years").replaceChildren(summary, ...grid);
+}
+LOADERS.gallery = async () => {
+  applyGalleryText();
+  glRows = await api("statements");
+  const accounts = new Map();
+  for (const s of glRows) accounts.set(String(s.account_id), s.account || `#${s.account_id}`);
+  const previous = $("gl-account").value;
+  $("gl-account").replaceChildren(...[...accounts].map(([id, name]) => el("option", { value: id, text: name })));
+  if (previous && accounts.has(previous)) $("gl-account").value = previous;
+  renderGallery();
+};
+$("gl-account").addEventListener("change", renderGallery);
 $("ex-xlsx").addEventListener("click", () => download("export/transactions.xlsx", "transactions.xlsx"));
 $("ex-pdf").addEventListener("click", () => download("export/report.pdf?year=" + $("ex-year").value, "report-" + $("ex-year").value + ".pdf"));
 $("ex-json").addEventListener("click", () => download("export/backup.json", "finance-backup.json"));
