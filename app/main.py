@@ -112,7 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 s.add(Category(name=name))
             s.commit()
 
-    app = FastAPI(title="yunohost-finance", version="0.1.1")
+    app = FastAPI(title="yunohost-finance", version="0.2.0")
     app.state.settings = settings
 
     def get_session():
