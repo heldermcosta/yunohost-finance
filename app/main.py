@@ -559,6 +559,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session.commit()
         return {"updated": updated, "rule_id": rule_id}
 
+    @app.get("/api/uncategorised/groups")
+    def uncategorised_groups(limit: int = 300, user: User = Depends(get_current_user),
+                             session: Session = Depends(get_session)) -> dict:
+        """Uncategorised transactions grouped by merchant key, most frequent group first.
+
+        Transfers are left out: they are linked to each other, not categorised.
+        """
+        rows = (accepted_query(session, user)
+                .filter(Transaction.category == UNCATEGORISED, Transaction.is_transfer.is_(False))
+                .order_by(Transaction.booked_on.desc(), Transaction.id.desc()).all())
+        groups: dict[str, dict] = {}
+        for t in rows:
+            key = _description_key(t.description) or t.description.strip().upper()[:30]
+            g = groups.setdefault(key, {"key": key, "count": 0, "total": Decimal("0"),
+                                        "ids": [], "examples": []})
+            g["count"] += 1
+            g["total"] += t.amount
+            g["ids"].append(t.id)
+            if len(g["examples"]) < 3 and t.description not in g["examples"]:
+                g["examples"].append(t.description)
+        ordered = sorted(groups.values(), key=lambda g: (-g["count"], -abs(g["total"]), g["key"]))
+        return {
+            "total": len(rows),
+            "groups": [{"key": g["key"], "count": g["count"], "total": str(g["total"].quantize(Decimal("0.01"))),
+                        "examples": g["examples"], "ids": g["ids"]}
+                       for g in ordered[:min(limit, 1000)]],
+        }
+
     @app.get("/api/summary/monthly")
     def monthly_summary(year: int | None = None, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
         query = accepted_query(session, user).filter(Transaction.is_transfer.is_(False))
