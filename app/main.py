@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from dataclasses import asdict
@@ -23,7 +24,8 @@ from .config import Settings
 from .db import setup_schema
 from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, WrongAccount,
                      WrongInstitution, import_pdf, read_pdf)
-from .models import Account, AccountShare, Budget, Category, PdfPassword, Rule, Statement, Transaction, User
+from .models import (Account, AccountShare, Budget, Category, PdfPassword, PortfolioSnapshot, Rule, Statement,
+                     Transaction, User)
 from .parsers import NoParserError
 from .transfers import detect_transfers, link, unlink
 
@@ -145,6 +147,7 @@ def _delete_statement(session: Session, statement: Statement, pdf_dir: Path) -> 
         if t.is_transfer:
             unlink(t, session)
         session.delete(t)
+    session.query(PortfolioSnapshot).filter_by(statement_id=statement.id).delete()
     session.delete(statement)
     session.commit()
     pdf_path.unlink(missing_ok=True)
@@ -532,6 +535,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rows = query.order_by(Transaction.booked_on.desc(), Transaction.id.desc()).offset(offset).limit(min(limit, 1000)).all()
         labels = account_labels(session, user)
         return {"total": total, "items": [serialise(t, labels) for t in rows]}
+
+    @app.get("/api/investments")
+    def list_investments(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
+        """Investment reports the user can see, oldest first per account."""
+        ids = visible_ids(session, user)
+        labels = account_labels(session, user)
+        rows = (session.query(PortfolioSnapshot)
+                .join(Statement, Statement.id == PortfolioSnapshot.statement_id)
+                .filter(PortfolioSnapshot.account_id.in_(ids), Statement.status == "accepted")
+                .order_by(PortfolioSnapshot.account_id, PortfolioSnapshot.period_end).all())
+        return [{"account": labels.get(r.account_id, ""), "period_end": r.period_end.isoformat(),
+                 "total_assets": str(r.total_assets), "cash": str(r.cash),
+                 "term_deposits": json.loads(r.term_deposits or "[]")} for r in rows]
 
     @app.get("/api/objects")
     def list_objects(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[str]:

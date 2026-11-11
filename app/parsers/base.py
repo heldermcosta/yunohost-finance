@@ -36,6 +36,8 @@ class ParsedStatement:
     anomalies: list[str] = field(default_factory=list)
     # "bank": a credit raises the balance. "card": a purchase raises what is owed.
     balance_direction: str = "bank"
+    # Portfolio snapshot for investment reports: total assets, cash, term deposits.
+    snapshot: dict | None = None
 
 
 @dataclass
