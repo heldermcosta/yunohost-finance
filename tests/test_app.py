@@ -702,3 +702,65 @@ def test_investment_report_is_listed_and_its_snapshot_removed_with_it(client, te
     assert client.delete(f"/api/statements/{statement_id}",
                          headers={"Authorization": "Basic aGVsZGVyOi0="}).status_code == 200
     assert client.get("/api/investments", headers={"Authorization": "Basic aGVsZGVyOi0="}).json() == []
+
+
+# --- Banco Carregosa monthly summaries ----------------------------------------
+
+CARREGOSA_2019 = "\n".join([
+    "Banco L.J. Carregosa, S.A.",
+    "Conta n.º: 6158838",
+    "Resumo Integrado de 2019-09-01 a 2019-09-30",
+    "Património da conta nº 6158838 a 2019-09-30 (EUR)",
+    "Total Ativos 43.388,11",
+    "Extrato de Movimentos por Moeda",
+    "Moeda: EUR / GoBulling Pro",
+    "Saldo Inicial 71,46",
+    "Saldo Final 3,85",
+    "Moeda: EUR / Depósitos à Ordem Transporte",
+    "2019-09-16 2019-09-16 Transferência de GoBulling Pro 110,00 110,00",
+    "2019-09-16 2019-09-16 Transferência para PT50002300004550322098894 -110,00 0,00",
+    "Saldo Final 0,00",
+    "Saldo Disponível 0,00",
+])
+
+CARREGOSA_2025 = "\n".join([
+    "Banco L. J. Carregosa, S.A. | Capital Social € 20.000.000,00",
+    "Período: 2025-10-01 a 2025-10-31",
+    "Conta n.º: 6158838",
+    "Serve o presente para remeter a V/ Exa(s). o seguinte Resumo Integrado.",
+    "Total Ativos 3 030,79 Total Passivos 0,00",
+    "Movimentos Depósitos à Ordem",
+    "Data Mov. Data Valor Descrição Valor Saldo",
+    "Depósitos à Ordem - EUR",
+    "Saldo Contabilístico Inicial 0,00",
+    "Não há movimentos para o período.",
+    "Saldo Contabilístico Final 0,00",
+    "GoBulling - EUR",
+    "Saldo Contabilístico Inicial 13,06",
+    "Saldo Contabilístico Final 13,06",
+])
+
+
+def test_carregosa_monthly_summary_reconciles_the_deposit_account_and_keeps_totals():
+    from app.parsers import find_parser
+    from app.parsers.base import reconcile
+
+    st = find_parser(CARREGOSA_2019).parse(CARREGOSA_2019)
+    assert st.institution == "carregosa" and st.account_ref == "6158838"
+    assert [t.amount for t in st.transactions] == [Decimal("110.00"), Decimal("-110.00")]
+    assert reconcile(st).status == "ok"
+    assert st.snapshot["total_assets"] == "43388.11"
+
+    st = find_parser(CARREGOSA_2025).parse(CARREGOSA_2025)
+    assert st.period_end.isoformat() == "2025-10-31"
+    assert st.transactions == [] and reconcile(st).status == "ok"
+    assert st.snapshot["total_assets"] == "3030.79"
+
+
+def test_carregosa_daily_ledger_reports_are_not_imported():
+    import pytest
+    from app.parsers import NoParserError, find_parser
+
+    daily = "Relatório de Lançamentos\nCarregosa\nConta n.º: 6158838\nDepósitos à Ordem\nSaldo Final 0,00"
+    with pytest.raises(NoParserError):
+        find_parser(daily)

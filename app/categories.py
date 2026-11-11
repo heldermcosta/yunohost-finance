@@ -47,6 +47,8 @@ DEFAULT_CATEGORIES = [
 # Keyword rules. The first rule whose keyword appears in the upper-cased description
 # wins, so specific subcategories come before their parents and before generic words.
 RULES: list[tuple[str, list[str]]] = [
+    # Moves into or out of the GoBulling trading sub-account are your own money.
+    ("Transfers - Personal", ["GOBULLING"]),
     ("Card Rewards / Cashback", ["BONIFICAÇÃO", "BONIFICACAO"]),
     ("Mortgage", ["EMPRESTIMO HIPOT", "CREDITO HABITACAO", "PAG.PRESTACAO"]),
     ("Insurance", ["SEGURO", "OCIDENTAL", "FIDELIDADE", "ASISA", "REAL VIDA"]),
