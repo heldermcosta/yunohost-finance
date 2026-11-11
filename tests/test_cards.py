@@ -99,3 +99,36 @@ def test_cofidis_account_is_the_dossier_not_the_reissued_card_number():
     old = parse_cofidis(statement("13865X"), "a.pdf")
     new = parse_cofidis(statement("30720X"), "b.pdf")
     assert old["account_number"] == new["account_number"] == "50000005140553"
+
+
+def test_cetelem_2022_2023_layout_reconciles_with_outros_movimentos_heading():
+    """2022-2023 statements print "OUTROS MOVIMENTOS" (not "Outros Movimentos Financeiros").
+    The previous balance is paid by a direct debit that must be left out, and the cashback
+    credit is netted; the rest must reconcile to the printed SALDO EM DÍVIDA."""
+    from app.parsers.cards.cetelem import parse_cetelem
+    text = "\n".join([
+        "CARTÃO DE CRÉDITO BLACK",
+        "PERÍODO DO EXTRATO:                        16.11.2022 a 16.12.2022",
+        "LIMITE CRÉDITO          SALDO EM DÍVIDA SALDO DISPONÍVEL",
+        "       5000,00 €                 667,78 €                 4332,22 €",
+        "DETALHE DE MOVIMENTOS (valores em Euros - Eur)",
+        "MODALIDADE FIM DO MES",
+        "                                             COMPRAS - MOVIMENTOS DO PERÍODO",
+        "  16.11.22        16.11.22        010        PAST. PASTEL NATA                    2,25",
+        "  17.11.22        17.11.22        010        SUPERMERCADO EXEMPLO               672,72",
+        "                                             OUTROS MOVIMENTOS",
+        "  01.12.22        01.12.22                   PAGAMENTO DE MENSALIDADE           634,09",
+        "  01.12.22        01.12.22                    (INCLUI) IMPOSTO SELO               0,30",
+        "  17.12.22        17.12.22                   DEVOLUCAO % COMPRAS ACUMULADAS      7,49",
+        "DETALHE DE VALORES A PAGAR (valores em Euros - Eur)",
+        "  16.12.22     MENSALIDADE         (4%)                 16.12.22                 0,00                       11,85          0,00          0,00       0,30",
+    ])
+    parsed = parse_cetelem(text, "extrato.pdf")
+    assert parsed is not None
+    assert parsed["anomalies"] == []
+    assert parsed["saldo_final"] == 667.78
+    assert not any("PAGAMENTO" in t["description"] for t in parsed["transactions"])
+    debit = round(sum(t["debit"] or 0 for t in parsed["transactions"]), 2)
+    credit = round(sum(t["credit"] or 0 for t in parsed["transactions"]), 2)
+    assert round(debit - credit, 2) == 667.78
+
