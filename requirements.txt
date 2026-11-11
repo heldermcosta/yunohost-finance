@@ -4,3 +4,5 @@ sqlalchemy>=2.0
 cryptography>=42
 python-multipart>=0.0.9
 psycopg[binary]>=3.1
+openpyxl>=3.1
+reportlab>=4.0

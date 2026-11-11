@@ -38,6 +38,19 @@ class WrongInstitution(Exception):
     pass
 
 
+class AccountNeeded(Exception):
+    """No account was given, and the owner does not have exactly one account for this bank."""
+
+    def __init__(self, institution: str, candidates: list[int]):
+        super().__init__(f"choose an account for {institution}")
+        self.institution = institution
+        self.candidates = candidates
+
+
+class WrongAccount(Exception):
+    """The statement's account number does not match the account it was uploaded to."""
+
+
 class PasswordRequired(Exception):
     """The PDF is protected and none of the known passwords opened it."""
 
@@ -82,14 +95,46 @@ def extract_text(pdf_bytes: bytes, work_dir: Path, candidates: list[str]) -> tup
     raise PasswordRequired()
 
 
+def _match_account(session: Session, account: Account | None, owner_accounts: list[Account],
+                   institution: str, ref_last4: str) -> Account:
+    """Pick the account a statement belongs to, from its institution and account number."""
+    if account is not None:
+        if account.institution != institution:
+            raise WrongInstitution(f"statement is from {institution}, account is {account.institution}")
+        if ref_last4 and account.account_ref_last4 and account.account_ref_last4 != ref_last4:
+            raise WrongAccount(f"statement is for the account ending {ref_last4}, "
+                               f"this account ends {account.account_ref_last4}")
+        if ref_last4 and not account.account_ref_last4:
+            account.account_ref_last4 = ref_last4
+            session.flush()
+        return account
+
+    same_bank = [a for a in owner_accounts if a.institution == institution]
+    if ref_last4:
+        exact = [a for a in same_bank if a.account_ref_last4 == ref_last4]
+        if len(exact) == 1:
+            return exact[0]
+        unnamed = [a for a in same_bank if not a.account_ref_last4]
+        if not exact and len(unnamed) == 1:
+            unnamed[0].account_ref_last4 = ref_last4
+            session.flush()
+            return unnamed[0]
+        raise AccountNeeded(institution, [a.id for a in same_bank])
+    if len(same_bank) == 1:
+        return same_bank[0]
+    raise AccountNeeded(institution, [a.id for a in same_bank])
+
+
 def import_pdf(
     session: Session,
     *,
     pdf_bytes: bytes,
     original_name: str,
-    account: Account,
+    account: Account | None,
+    owner_accounts: list[Account],
     uploaded_by_id: int,
     password_candidates: list[str],
+    user_rules: list[tuple[str, str]],
     pdf_dir: Path,
     work_dir: Path,
 ) -> ImportResult:
@@ -101,13 +146,13 @@ def import_pdf(
     text, password_used = extract_text(pdf_bytes, work_dir, password_candidates)
     parser = find_parser(text)  # raises NoParserError if no parser recognises it
 
-    if parser.institution != account.institution:
-        raise WrongInstitution(
-            f"statement is from {parser.institution}, account is {account.institution}"
-        )
 
     parsed = parser.parse(text)
     result = reconcile(parsed)
+
+    # Only the last four digits are kept, and only for matching.
+    ref_last4 = (parsed.account_ref or "")[-4:]
+    account = _match_account(session, account, owner_accounts, parser.institution, ref_last4)
     status = "accepted" if result.ok else "review"
 
     notes = list(parsed.anomalies) + list(result.row_warnings)
@@ -137,6 +182,7 @@ def import_pdf(
     session.flush()
 
     for t in parsed.transactions:
+        category, source = categorize(t.description, t.amount, user_rules)
         session.add(
             Transaction(
                 statement_id=statement.id,
@@ -146,7 +192,8 @@ def import_pdf(
                 description=t.description[:255],
                 amount=t.amount,
                 balance=t.balance,
-                category=categorize(t.description, t.amount),
+                category=category,
+                category_source=source,
             )
         )
     session.commit()

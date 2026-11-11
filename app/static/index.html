@@ -6,505 +6,983 @@
 <title>Finance</title>
 <style>
 :root {
-  --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
-  --line: #e3e6ec; --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+  --bg: #f5f6f8; --card: #ffffff; --text: #1c2330; --muted: #6b7280; --line: #e2e5eb;
+  --accent: #2563eb; --accent-text: #ffffff; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+  --soft: #eef2ff; --shadow: 0 1px 2px rgba(0,0,0,.06);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111418; --card: #1a1f27; --text: #e6e9ef; --muted: #9aa3b2;
-    --line: #2a313c; --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --bg: #0f1216; --card: #171c23; --text: #e6e9ef; --muted: #98a2b3; --line: #29313c;
+    --accent: #60a5fa; --accent-text: #0b1220; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --soft: #1e2736; --shadow: none;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #111418; --card: #1a1f27; --text: #e6e9ef; --muted: #9aa3b2;
-  --line: #2a313c; --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  --bg: #0f1216; --card: #171c23; --text: #e6e9ef; --muted: #98a2b3; --line: #29313c;
+  --accent: #60a5fa; --accent-text: #0b1220; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  --soft: #1e2736; --shadow: none;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
-header h1 { font-size: 18px; margin: 0; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { background: none; border: 1px solid transparent; color: var(--muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
-nav button.active { color: var(--accent); border-color: var(--line); background: var(--bg); }
-main { padding: 16px; max-width: 1100px; margin: 0 auto; }
-section { display: none; }
-section.active { display: block; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0 12px 0 0; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+nav button { background: none; border: 1px solid transparent; color: var(--muted); padding: 6px 10px; border-radius: 8px; cursor: pointer; font: inherit; }
+nav button.active { color: var(--accent); border-color: var(--line); background: var(--soft); }
+.badge { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 12px; text-align: center; }
+main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+section { display: none; } section.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 14px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
-input, select, button.primary, button.secondary, button.danger { font: inherit; border-radius: 6px; padding: 7px 10px; }
-input, select { width: 100%; max-width: 360px; background: var(--card); color: var(--text); border: 1px solid var(--line); }
-button { cursor: pointer; }
-button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
-button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); }
-button.danger { background: var(--card); color: var(--bad); border: 1px solid var(--line); }
+input, select, textarea { font: inherit; border-radius: 8px; padding: 7px 10px; background: var(--card); color: var(--text); border: 1px solid var(--line); width: 100%; max-width: 100%; }
+input[type=checkbox] { width: auto; }
+input[type=file] { padding: 6px; }
+button { font: inherit; border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.danger { color: var(--bad); }
+button.small { padding: 3px 8px; font-size: 13px; }
 button:disabled { opacity: .5; cursor: default; }
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-.row > div { flex: 1 1 160px; }
-.row > div.wide { flex: 2 1 240px; }
+.row > * { flex: 1 1 160px; }
+.row > .wide { flex: 2 1 260px; }
+.row > .auto { flex: 0 0 auto; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.desc { white-space: normal; min-width: 180px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.desc { min-width: 200px; }
+td.cat select { max-width: 220px; padding: 4px 6px; font-size: 14px; }
+tr.transfer td { color: var(--muted); }
 tr.total td { font-weight: 700; }
 .muted { color: var(--muted); font-size: 13px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
-.pill.ok { color: var(--ok); } .pill.warning { color: var(--warn); } .pill.failed { color: var(--bad); }
+.pill.ok, .pill.accepted { color: var(--ok); } .pill.warning, .pill.review { color: var(--warn); } .pill.failed { color: var(--bad); }
 .neg { color: var(--bad); } .pos { color: var(--ok); }
-#msg { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--card); padding: 8px 14px; border-radius: 8px; display: none; max-width: 90vw; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-@media (max-width: 600px) { main { padding: 12px; } th, td { padding: 6px; } }
+.bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--ok); }
+.bar.near > i { background: var(--warn); } .bar.over > i { background: var(--bad); }
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 8px; }
+.chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.chart .col i { display: block; width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.chart .col span { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.queue li { margin: 4px 0; }
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; max-width: min(420px, 92vw); }
+.toast { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.15); cursor: pointer; }
+.toast.success { border-left-color: var(--ok); } .toast.error { border-left-color: var(--bad); } .toast.warn { border-left-color: var(--warn); }
+.toast b { display: block; margin-bottom: 2px; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 40; padding: 16px; }
+.overlay.open { display: flex; }
+.modal { background: var(--card); border-radius: 14px; padding: 18px; width: min(560px, 100%); max-height: 86vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.check-list label { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 14px; margin: 6px 0; }
+.check-list input { margin-top: 3px; }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+.hidden { display: none !important; }
+@media (max-width: 640px) { main { padding: 12px; } th, td { padding: 6px; } nav button { padding: 5px 8px; } }
 </style>
 </head>
 <body>
 <header>
   <h1>Finance</h1>
   <nav id="tabs">
-    <button data-tab="overview" class="active">Overview</button>
-    <button data-tab="transactions">Transactions</button>
-    <button data-tab="upload">Upload</button>
-    <button data-tab="review">Review <span id="review-count" class="muted"></span></button>
-    <button data-tab="accounts">Accounts</button>
-    <button data-tab="settings">Settings</button>
+    <button data-tab="overview" class="active" data-i18n="tab_overview">Overview</button>
+    <button data-tab="transactions" data-i18n="tab_transactions">Transactions</button>
+    <button data-tab="import" data-i18n="tab_import">Import</button>
+    <button data-tab="review"><span data-i18n="tab_review">Review</span> <span id="review-count" class="badge hidden"></span></button>
+    <button data-tab="rules" data-i18n="tab_rules">Rules</button>
+    <button data-tab="accounts" data-i18n="tab_accounts">Accounts</button>
+    <button data-tab="settings" data-i18n="tab_settings">Settings</button>
   </nav>
 </header>
+
 <main>
 
+<!-- OVERVIEW -->
 <section id="tab-overview" class="active">
   <div class="card">
     <div class="row">
-      <div><label for="ov-year">Year</label><select id="ov-year"></select></div>
-      <div class="muted" id="ov-note"></div>
+      <div class="auto"><label for="ov-year" data-i18n="year">Year</label><select id="ov-year"></select></div>
+      <div class="muted" data-i18n="overview_note">Expenses from accepted statements. Transfers between your accounts are not counted.</div>
     </div>
   </div>
   <div class="card">
-    <h2>Monthly spending by category</h2>
+    <h2 data-i18n="monthly_totals">Spending per month</h2>
+    <div class="chart" id="ov-chart"></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="by_category">Spending by category</h2>
     <div class="table-wrap" id="ov-table"></div>
   </div>
   <div class="card">
-    <h2>Income by month</h2>
-    <div class="table-wrap" id="ov-income"></div>
+    <div class="row">
+      <div class="wide"><h2 data-i18n="budgets">Budgets</h2></div>
+      <div class="auto"><label for="bd-month" data-i18n="month">Month</label><input type="month" id="bd-month"></div>
+    </div>
+    <div id="bd-list"></div>
+    <h3 data-i18n="add_budget">Add or change a budget</h3>
+    <div class="row">
+      <div><label for="bd-category" data-i18n="category">Category</label><select id="bd-category"></select></div>
+      <div><label for="bd-limit" data-i18n="monthly_limit">Monthly limit (EUR)</label><input type="number" min="0.01" step="0.01" id="bd-limit"></div>
+      <div class="auto"><button class="primary" id="bd-save" data-i18n="save">Save</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="export">Export</h2>
+    <div class="toolbar">
+      <button id="ex-csv">CSV</button>
+      <button id="ex-xlsx">Excel (XLSX)</button>
+      <select id="ex-year" style="width:auto"></select>
+      <button id="ex-pdf">PDF report</button>
+      <button id="ex-json" data-i18n="backup_json">Full backup (JSON)</button>
+    </div>
+    <p class="muted" data-i18n="backup_note">The JSON backup has your transactions, accounts, categories, rules and budgets. It does not include PDFs or passwords.</p>
   </div>
 </section>
 
+<!-- TRANSACTIONS -->
 <section id="tab-transactions">
   <div class="card">
     <div class="row">
-      <div><label for="tx-account">Account</label><select id="tx-account"></select></div>
-      <div><label for="tx-category">Category</label><select id="tx-category"></select></div>
-      <div><label for="tx-start">From</label><input type="date" id="tx-start"></div>
-      <div><label for="tx-end">To</label><input type="date" id="tx-end"></div>
-      <div><button class="primary" id="tx-apply">Apply</button></div>
-      <div><button class="secondary" id="tx-csv">Export CSV</button></div>
+      <div><label for="tx-account" data-i18n="account">Account</label><select id="tx-account"></select></div>
+      <div><label for="tx-category" data-i18n="category">Category</label><select id="tx-category"></select></div>
+      <div><label for="tx-transfers" data-i18n="transfers">Transfers</label>
+        <select id="tx-transfers">
+          <option value="include" data-i18n="incl">Include</option>
+          <option value="exclude" data-i18n="excl">Exclude</option>
+          <option value="only" data-i18n="only">Only transfers</option>
+        </select></div>
+      <div class="wide"><label for="tx-q" data-i18n="search">Search description</label><input id="tx-q" type="search"></div>
+      <div><label for="tx-start" data-i18n="from">From</label><input type="date" id="tx-start"></div>
+      <div><label for="tx-end" data-i18n="to">To</label><input type="date" id="tx-end"></div>
+      <div class="auto"><button class="primary" id="tx-apply" data-i18n="apply">Apply</button></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button class="small" id="tx-detect" data-i18n="detect_transfers">Find transfers</button>
+      <span class="muted" id="tx-count"></span>
     </div>
   </div>
   <div class="card">
-    <div class="muted" id="tx-count"></div>
     <div class="table-wrap" id="tx-table"></div>
-  </div>
-</section>
-
-<section id="tab-upload">
-  <div class="card">
-    <h2>Import a statement</h2>
-    <p class="muted">The PDF is checked and reconciled. Statements that do not reconcile go to the review queue and stay out of the analytics until accepted.</p>
-    <div class="row">
-      <div class="wide"><label for="up-account">Account</label><select id="up-account"></select></div>
+    <div class="pager">
+      <button class="small" id="tx-prev" data-i18n="prev">Previous</button>
+      <span class="muted" id="tx-page"></span>
+      <button class="small" id="tx-next" data-i18n="next">Next</button>
     </div>
-    <label for="up-file">PDF statement</label>
-    <input type="file" id="up-file" accept="application/pdf">
-    <label for="up-pw">PDF password (only if the PDF is protected and no saved password opens it)</label>
-    <input type="password" id="up-pw" autocomplete="off">
-    <div style="margin-top:12px"><button class="primary" id="up-go">Import</button></div>
-    <div id="up-result" style="margin-top:12px"></div>
   </div>
 </section>
 
+<!-- IMPORT -->
+<section id="tab-import">
+  <div class="card">
+    <h2 data-i18n="import_title">Import statements</h2>
+    <p class="muted" data-i18n="import_note">Choose one or more PDFs. Each file is checked and reconciled. A statement that does not reconcile goes to Review and stays out of the totals until accepted.</p>
+    <div class="row">
+      <div class="wide"><label for="up-account" data-i18n="account_auto">Account</label>
+        <select id="up-account"></select></div>
+    </div>
+    <label for="up-files" data-i18n="pdf_files">PDF files</label>
+    <input type="file" id="up-files" accept="application/pdf" multiple>
+    <div class="toolbar" style="margin-top:12px">
+      <button class="primary" id="up-go" data-i18n="import_button">Import</button>
+      <span class="muted" id="up-summary"></span>
+    </div>
+    <ul class="queue" id="up-queue"></ul>
+  </div>
+</section>
+
+<!-- REVIEW -->
 <section id="tab-review">
   <div class="card">
-    <h2>Statements waiting for review</h2>
+    <h2 data-i18n="review_title">Waiting for review</h2>
+    <p class="muted" data-i18n="review_note">Accept a statement once you have checked it. Deleting removes the statement and its PDF.</p>
     <div class="table-wrap" id="rv-table"></div>
   </div>
 </section>
 
-<section id="tab-accounts">
+<!-- RULES -->
+<section id="tab-rules">
   <div class="card">
-    <h2>Accounts</h2>
-    <div class="table-wrap" id="ac-table"></div>
+    <h2 data-i18n="rules_title">Category rules</h2>
+    <p class="muted" data-i18n="rules_note">If a description contains the text, the transaction gets that category. Manual choices are never overwritten.</p>
+    <div class="table-wrap" id="rl-table"></div>
   </div>
   <div class="card">
-    <h2>New account</h2>
+    <h3 data-i18n="add_rule">Add a rule</h3>
     <div class="row">
-      <div><label for="ac-institution">Institution</label><input id="ac-institution" placeholder="activobank"></div>
-      <div class="wide"><label for="ac-label">Label</label><input id="ac-label" placeholder="ActivoBank Helder"></div>
-      <div><label for="ac-last4">Last 4 digits</label><input id="ac-last4" maxlength="4"></div>
-      <div><button class="primary" id="ac-create">Create</button></div>
+      <div class="wide"><label for="rl-contains" data-i18n="description_contains">Description contains</label><input id="rl-contains"></div>
+      <div><label for="rl-category" data-i18n="category">Category</label><select id="rl-category"></select></div>
+      <div class="auto"><label><input type="checkbox" id="rl-apply" checked> <span data-i18n="apply_existing">Apply to existing transactions</span></label></div>
+      <div class="auto"><button class="primary" id="rl-save" data-i18n="save">Save</button></div>
     </div>
   </div>
   <div class="card">
-    <h2>Share an account you own</h2>
+    <h2 data-i18n="categories">Categories</h2>
     <div class="row">
-      <div><label for="sh-account">Account</label><select id="sh-account"></select></div>
-      <div><label for="sh-user">Username</label><input id="sh-user" placeholder="elsa"></div>
-      <div><button class="primary" id="sh-go">Share</button></div>
+      <div class="wide"><label for="cat-new" data-i18n="new_category">New category</label><input id="cat-new"></div>
+      <div class="auto"><button id="cat-add" data-i18n="add">Add</button></div>
     </div>
+    <div class="table-wrap" id="cat-table" style="margin-top:12px"></div>
   </div>
 </section>
 
+<!-- ACCOUNTS -->
+<section id="tab-accounts">
+  <div class="card">
+    <h2 data-i18n="accounts">Accounts</h2>
+    <div class="table-wrap" id="ac-table"></div>
+  </div>
+  <div class="card">
+    <h3 data-i18n="new_account">New account</h3>
+    <div class="row">
+      <div><label for="ac-institution" data-i18n="bank">Bank</label><input id="ac-institution" list="institutions" placeholder="activobank"></div>
+      <div class="wide"><label for="ac-label" data-i18n="label">Name</label><input id="ac-label"></div>
+      <div><label for="ac-last4" data-i18n="last4">Last 4 digits of the account number</label><input id="ac-last4" maxlength="4" inputmode="numeric"></div>
+      <div class="auto"><label><input type="checkbox" id="ac-household"> <span data-i18n="household">Household account</span></label></div>
+      <div class="auto"><button class="primary" id="ac-create" data-i18n="create">Create</button></div>
+    </div>
+    <datalist id="institutions"><option value="activobank"></datalist>
+  </div>
+</section>
+
+<!-- SETTINGS -->
 <section id="tab-settings">
   <div class="card">
-    <h2>Saved PDF passwords</h2>
-    <p class="muted">Used automatically for protected statements. They are stored encrypted and never shown again.</p>
+    <h2 data-i18n="preferences">Preferences</h2>
+    <div class="row">
+      <div><label for="st-lang" data-i18n="language">Language</label>
+        <select id="st-lang"><option value="en">English</option><option value="pt">Português</option></select></div>
+      <div class="wide"><label for="st-scope" data-i18n="view_scope">Accounts I see</label>
+        <select id="st-scope">
+          <option value="own_shared" data-i18n="scope_own">Own and shared accounts</option>
+          <option value="all" data-i18n="scope_all">Also household accounts of other users</option>
+        </select></div>
+      <div class="auto"><button class="primary" id="st-save" data-i18n="save">Save</button></div>
+    </div>
+    <p class="muted"><span data-i18n="signed_in_as">Signed in as</span> <span id="st-user"></span></p>
+  </div>
+  <div class="card">
+    <h2 data-i18n="pdf_passwords">Saved PDF passwords</h2>
+    <p class="muted" data-i18n="pdf_pw_note">Tried automatically on protected statements. Stored encrypted and never shown again.</p>
     <div class="table-wrap" id="pw-table"></div>
     <div class="row" style="margin-top:12px">
-      <div><label for="pw-label">Label</label><input id="pw-label" placeholder="Activo card"></div>
-      <div><label for="pw-value">Password</label><input type="password" id="pw-value" autocomplete="new-password"></div>
-      <div><button class="primary" id="pw-add">Save password</button></div>
+      <div><label for="pw-label" data-i18n="label">Name</label><input id="pw-label"></div>
+      <div><label for="pw-value" data-i18n="password">Password</label><input type="password" id="pw-value" autocomplete="new-password"></div>
+      <div class="auto"><button class="primary" id="pw-add" data-i18n="save">Save</button></div>
     </div>
   </div>
   <div class="card">
-    <h2>Who you see</h2>
-    <div class="row">
-      <div class="wide">
-        <label for="st-scope">View scope</label>
-        <select id="st-scope">
-          <option value="own_shared">Own and shared accounts</option>
-          <option value="all">All accounts</option>
-        </select>
-      </div>
-      <div><button class="primary" id="st-save">Save</button></div>
-    </div>
-    <p class="muted">Signed in as <span id="st-user"></span>.</p>
+    <h2 data-i18n="transfers_title">Transfers</h2>
+    <p class="muted" data-i18n="transfers_note">A transfer is a debit in one of your accounts matched with a credit of the same amount in another, within 5 days, with a transfer or card-payment description. Transfers are excluded from spending.</p>
+    <button id="st-detect" data-i18n="detect_transfers">Find transfers</button>
   </div>
 </section>
 
 </main>
-<div id="msg"></div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
 
 <script>
 "use strict";
 const API = "api/";  // relative, so it works under /finance/ behind the proxy
-const state = { me: null, accounts: [], categories: [] };
-const eur = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" });
-const fmt = (s) => eur.format(Number(s));
 
+/* ---------- i18n ---------- */
+const STRINGS = {
+en: {
+  tab_overview:"Overview", tab_transactions:"Transactions", tab_import:"Import", tab_review:"Review", tab_rules:"Rules", tab_accounts:"Accounts", tab_settings:"Settings",
+  year:"Year", overview_note:"Expenses from accepted statements. Transfers between your accounts are not counted.",
+  monthly_totals:"Spending per month", by_category:"Spending by category", budgets:"Budgets", month:"Month", add_budget:"Add or change a budget",
+  category:"Category", monthly_limit:"Monthly limit (EUR)", save:"Save", export:"Export", backup_json:"Full backup (JSON)",
+  backup_note:"The JSON backup has your transactions, accounts, categories, rules and budgets. It does not include PDFs or passwords.",
+  account:"Account", transfers:"Transfers", incl:"Include", excl:"Exclude", only:"Only transfers", search:"Search description", from:"From", to:"To",
+  apply:"Apply", detect_transfers:"Find transfers", prev:"Previous", next:"Next", no_transactions:"No transactions match.",
+  import_title:"Import statements", import_note:"Choose one or more PDFs. Each file is checked and reconciled. A statement that does not reconcile goes to Review and stays out of the totals until accepted.",
+  account_auto:"Account (detected from the statement when left empty)", pdf_files:"PDF files", import_button:"Import",
+  review_title:"Waiting for review", review_note:"Accept a statement once you have checked it. Deleting removes the statement and its PDF.", nothing_review:"Nothing waiting for review.",
+  rules_title:"Category rules", rules_note:"If a description contains the text, the transaction gets that category. Manual choices are never overwritten.",
+  add_rule:"Add a rule", description_contains:"Description contains", apply_existing:"Apply to existing transactions", categories:"Categories",
+  new_category:"New category", add:"Add", rename:"Rename", delete:"Delete", no_rules:"No rules yet.",
+  accounts:"Accounts", new_account:"New account", bank:"Bank", label:"Name", last4:"Last 4 digits of the account number", household:"Household account", create:"Create",
+  household_short:"Household", owner:"Owner", you:"You", shared_by:"Shared by {owner}", share_with:"Share with (username)", share:"Share", unshare:"Remove", edit:"Edit",
+  preferences:"Preferences", language:"Language", view_scope:"Accounts I see", scope_own:"Own and shared accounts", scope_all:"Also household accounts of other users",
+  signed_in_as:"Signed in as", pdf_passwords:"Saved PDF passwords", pdf_pw_note:"Tried automatically on protected statements. Stored encrypted and never shown again.",
+  password:"Password", transfers_title:"Transfers", transfers_note:"A transfer is a debit in one of your accounts matched with a credit of the same amount in another, within 5 days, with a transfer or card-payment description. Transfers are excluded from spending.",
+  saved:"Saved", deleted:"Deleted", cancel:"Cancel", confirm:"Confirm", ok:"OK",
+  yes:"yes", mark_transfer:"Transfer", unmark_transfer:"Not a transfer", delete_confirm:"Delete this?",
+  similar_title:"Apply to similar transactions?", similar_note:"These transactions have a similar description. Tick the ones to change to {category}.",
+  save_rule_for:"Also save a rule: descriptions containing \"{text}\" get this category", apply_selected:"Apply", skip:"Skip",
+  choose_account_title:"Which account is this statement for?", choose_account_note:"{file} matches several accounts or none. Pick the right one.", no_account_match:"No account matches this statement. Create one under Accounts first.",
+  password_title:"Password for {file}", password_note:"This PDF is protected. Enter its password. It will be saved for future statements if it works.", skip_file:"Skip this file",
+  result_accepted:"accepted, {n} transactions", result_review:"needs review, {n} transactions", already:"already imported", error:"error",
+  summary_done:"{ok} imported, {dup} already imported, {err} with errors", uploading:"Uploading…",
+  bulk_updated:"{n} transactions updated", rule_saved:"Rule saved", rule_applied:"Rule applied to {n} transactions",
+  pw_added:"Password saved", pw_none:"No saved passwords.", cat_none:"No categories.", cat_exists:"Already exists",
+  budget_none:"No budgets yet. Add one below.", budget_spent:"{spent} of {limit}", budget_over:"over", budget_near:"near",
+  delete_category_confirm:"Delete category \"{name}\"? Its transactions become Uncategorised and its rules and budgets are removed.",
+  delete_account_confirm:"Delete this account? Only possible when it has no statements.", delete_rule_confirm:"Delete this rule?",
+  delete_statement_confirm:"Delete this statement and its PDF?", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
+  scope_saved:"Saved", detect_done:"{n} transfer pairs found", not_signed_in:"Not signed in",
+  err_too_large:"The file is larger than 20 MB.", err_not_pdf:"This is not a PDF file.", err_no_parser:"No parser recognises this statement yet.",
+  err_wrong_institution:"This statement is from another bank than the account.", err_wrong_account:"This statement belongs to another account.",
+  err_has_statements:"This account has statements. Delete them first.", err_generic:"Something went wrong ({status})."
+},
+pt: {
+  tab_overview:"Resumo", tab_transactions:"Movimentos", tab_import:"Importar", tab_review:"Revisão", tab_rules:"Regras", tab_accounts:"Contas", tab_settings:"Definições",
+  year:"Ano", overview_note:"Despesas dos extratos aceites. As transferências entre as suas contas não contam.",
+  monthly_totals:"Despesas por mês", by_category:"Despesas por categoria", budgets:"Orçamentos", month:"Mês", add_budget:"Adicionar ou alterar um orçamento",
+  category:"Categoria", monthly_limit:"Limite mensal (EUR)", save:"Guardar", export:"Exportar", backup_json:"Cópia completa (JSON)",
+  backup_note:"A cópia JSON tem os movimentos, contas, categorias, regras e orçamentos. Não inclui PDFs nem palavras-passe.",
+  account:"Conta", transfers:"Transferências", incl:"Incluir", excl:"Excluir", only:"Só transferências", search:"Pesquisar descrição", from:"De", to:"Até",
+  apply:"Aplicar", detect_transfers:"Procurar transferências", prev:"Anterior", next:"Seguinte", no_transactions:"Nenhum movimento corresponde.",
+  import_title:"Importar extratos", import_note:"Escolha um ou mais PDFs. Cada ficheiro é verificado e reconciliado. Um extrato que não reconcilia vai para Revisão e não conta até ser aceite.",
+  account_auto:"Conta (detetada no extrato se ficar vazio)", pdf_files:"Ficheiros PDF", import_button:"Importar",
+  review_title:"A aguardar revisão", review_note:"Aceite um extrato depois de o verificar. Apagar remove o extrato e o seu PDF.", nothing_review:"Nada a aguardar revisão.",
+  rules_title:"Regras de categoria", rules_note:"Se a descrição contiver o texto, o movimento recebe essa categoria. As escolhas manuais nunca são substituídas.",
+  add_rule:"Adicionar uma regra", description_contains:"A descrição contém", apply_existing:"Aplicar aos movimentos existentes", categories:"Categorias",
+  new_category:"Nova categoria", add:"Adicionar", rename:"Renomear", delete:"Apagar", no_rules:"Ainda não há regras.",
+  accounts:"Contas", new_account:"Nova conta", bank:"Banco", label:"Nome", last4:"Últimos 4 dígitos do número da conta", household:"Conta do agregado", create:"Criar",
+  household_short:"Agregado", owner:"Titular", you:"Você", shared_by:"Partilhada por {owner}", share_with:"Partilhar com (utilizador)", share:"Partilhar", unshare:"Remover", edit:"Editar",
+  preferences:"Preferências", language:"Idioma", view_scope:"Contas que vejo", scope_own:"Contas próprias e partilhadas", scope_all:"Também contas do agregado de outros utilizadores",
+  signed_in_as:"Sessão iniciada como", pdf_passwords:"Palavras-passe de PDFs guardadas", pdf_pw_note:"Usadas automaticamente em extratos protegidos. Guardadas cifradas e nunca mostradas de novo.",
+  password:"Palavra-passe", transfers_title:"Transferências", transfers_note:"Uma transferência é um débito numa das suas contas com um crédito do mesmo valor noutra, até 5 dias depois, com descrição de transferência ou pagamento de cartão. Não contam como despesa.",
+  saved:"Guardado", deleted:"Apagado", cancel:"Cancelar", confirm:"Confirmar", ok:"OK",
+  yes:"sim", mark_transfer:"Transferência", unmark_transfer:"Não é transferência", delete_confirm:"Apagar?",
+  similar_title:"Aplicar a movimentos semelhantes?", similar_note:"Estes movimentos têm descrição semelhante. Marque os que quer alterar para {category}.",
+  save_rule_for:"Guardar também uma regra: descrições que contenham \"{text}\" recebem esta categoria", apply_selected:"Aplicar", skip:"Ignorar",
+  choose_account_title:"A que conta pertence este extrato?", choose_account_note:"{file} corresponde a várias contas ou a nenhuma. Escolha a certa.", no_account_match:"Nenhuma conta corresponde a este extrato. Crie uma em Contas primeiro.",
+  password_title:"Palavra-passe de {file}", password_note:"Este PDF está protegido. Escreva a palavra-passe. Fica guardada para os próximos extratos se funcionar.", skip_file:"Ignorar este ficheiro",
+  result_accepted:"aceite, {n} movimentos", result_review:"precisa de revisão, {n} movimentos", already:"já importado", error:"erro",
+  summary_done:"{ok} importados, {dup} já importados, {err} com erro", uploading:"A enviar…",
+  bulk_updated:"{n} movimentos atualizados", rule_saved:"Regra guardada", rule_applied:"Regra aplicada a {n} movimentos",
+  pw_added:"Palavra-passe guardada", pw_none:"Sem palavras-passe guardadas.", cat_none:"Sem categorias.", cat_exists:"Já existe",
+  budget_none:"Ainda não há orçamentos. Adicione um abaixo.", budget_spent:"{spent} de {limit}", budget_over:"excedido", budget_near:"perto",
+  delete_category_confirm:"Apagar a categoria \"{name}\"? Os movimentos ficam sem categoria e as regras e orçamentos são removidos.",
+  delete_account_confirm:"Apagar esta conta? Só é possível sem extratos.", delete_rule_confirm:"Apagar esta regra?",
+  delete_statement_confirm:"Apagar este extrato e o seu PDF?", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
+  scope_saved:"Guardado", detect_done:"{n} pares de transferências encontrados", not_signed_in:"Sessão não iniciada",
+  err_too_large:"O ficheiro tem mais de 20 MB.", err_not_pdf:"Não é um ficheiro PDF.", err_no_parser:"Ainda não há leitor para este extrato.",
+  err_wrong_institution:"Este extrato é de outro banco que não o da conta.", err_wrong_account:"Este extrato pertence a outra conta.",
+  err_has_statements:"Esta conta tem extratos. Apague-os primeiro.", err_generic:"Algo correu mal ({status})."
+}};
+let lang = "en";
+try { lang = localStorage.getItem("finance-lang") || (navigator.language || "en").slice(0, 2); } catch (e) {}
+if (!STRINGS[lang]) lang = "en";
+
+function t(key, vars = {}) {
+  let s = (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+  for (const [k, v] of Object.entries(vars)) s = s.split("{" + k + "}").join(String(v));
+  return s;
+}
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(n => { n.textContent = t(n.dataset.i18n); });
+  document.getElementById("st-lang").value = lang;
+  eur = new Intl.NumberFormat(lang === "pt" ? "pt-PT" : "en-IE", { style: "currency", currency: "EUR" });
+}
+function setLanguage(l) {
+  lang = STRINGS[l] ? l : "en";
+  try { localStorage.setItem("finance-lang", lang); } catch (e) {}
+  applyLanguage();
+  refreshCurrentTab();
+}
+let eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const money = (v) => eur.format(Number(v));
+
+/* ---------- helpers ---------- */
 function el(tag, props = {}, children = []) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (k === "class") n.className = v;
     else if (k === "text") n.textContent = v;
+    else if (k === "on") for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
+    else if (k === "value") n.value = v;
     else n.setAttribute(k, v);
   }
-  for (const c of [].concat(children)) n.append(c);
+  for (const c of [].concat(children)) if (c !== null && c !== undefined) n.append(c);
   return n;
 }
+const $ = (id) => document.getElementById(id);
 
-function toast(text) {
-  const m = document.getElementById("msg");
-  m.textContent = text; m.style.display = "block";
-  clearTimeout(toast.t); toast.t = setTimeout(() => (m.style.display = "none"), 3500);
+/* ---------- toasts ---------- */
+function toast(type, title, text = "", timeout = 5000) {
+  const node = el("div", { class: "toast " + type, role: "status" }, [
+    el("b", { text: title }), text ? el("span", { text }) : null,
+  ]);
+  const remove = () => node.remove();
+  node.addEventListener("click", remove);
+  $("toasts").append(node);
+  setTimeout(remove, timeout);
 }
 
+/* ---------- api ---------- */
 async function api(path, opts = {}) {
-  const init = { credentials: "same-origin", ...opts, headers: { ...(opts.headers || {}) } };
-  if (opts.json !== undefined) {
-    init.body = JSON.stringify(opts.json);
-    init.headers["Content-Type"] = "application/json";
-    delete init.json;
-  }
+  const init = { credentials: "same-origin", method: opts.method || "GET", headers: {} };
+  if (opts.json !== undefined) { init.body = JSON.stringify(opts.json); init.headers["Content-Type"] = "application/json"; }
+  if (opts.body !== undefined) init.body = opts.body;
   const r = await fetch(API + path, init);
-  let body = null;
   const type = r.headers.get("content-type") || "";
-  if (type.includes("application/json")) body = await r.json();
+  const body = type.includes("application/json") ? await r.json() : null;
   if (!r.ok) {
-    const detail = body && body.detail;
+    const d = body && body.detail;
     const err = new Error(
-      typeof detail === "string" ? detail
-      : detail && detail.message ? detail.message
-      : (r.status === 401 ? "Not signed in" : `Error ${r.status}`));
-    err.code = detail && detail.code;
+      d && typeof d === "object" && d.message ? d.message
+      : typeof d === "string" ? d
+      : r.status === 401 ? t("not_signed_in") : t("err_generic", { status: r.status }));
+    err.status = r.status;
+    err.code = d && typeof d === "object" ? d.code : undefined;
+    err.data = d && typeof d === "object" ? d : {};
     throw err;
   }
   return body;
 }
+const errorText = (e) => e.code && t("err_" + e.code) !== "err_" + e.code ? t("err_" + e.code) : e.message;
 
+/* ---------- modal ---------- */
+function modal(build) {
+  return new Promise(resolve => {
+    const box = $("modal");
+    box.replaceChildren();
+    const done = (value) => { $("overlay").classList.remove("open"); resolve(value); };
+    build(box, done);
+    $("overlay").classList.add("open");
+  });
+}
+function confirmBox(message) {
+  return modal((box, done) => {
+    box.append(el("p", { text: message }), el("div", { class: "actions" }, [
+      el("button", { text: t("cancel"), on: { click: () => done(false) } }),
+      el("button", { class: "primary", text: t("confirm"), on: { click: () => done(true) } }),
+    ]));
+  });
+}
+
+/* ---------- tabs ---------- */
+const LOADERS = {};
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll("main > section").forEach(s => s.classList.toggle("active", s.id === "tab-" + name));
-  const loaders = { overview: loadOverview, transactions: loadTransactions, review: loadReview, accounts: loadAccounts, upload: loadAccounts, settings: loadSettings };
-  if (loaders[name]) loaders[name]().catch(e => toast(e.message));
+  if (LOADERS[name]) LOADERS[name]().catch(e => toast("error", errorText(e)));
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
 }
-
+let currentTab = "overview";
+function refreshCurrentTab() {
+  const active = document.querySelector("#tabs button.active");
+  if (active) { currentTab = active.dataset.tab; }
+  applyLanguage();
+  if (LOADERS[currentTab]) LOADERS[currentTab]().catch(() => {});
+}
 document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 
-async function loadAccountsCache() {
-  state.accounts = await api("accounts");
-  const options = state.accounts.map(a => el("option", { value: a.id, text: `${a.label} (${a.institution})${a.is_owner ? "" : " · shared by " + a.owner}` }));
-  for (const id of ["tx-account", "up-account", "sh-account"]) {
-    const sel = document.getElementById(id);
+/* ---------- shared data ---------- */
+const cache = { accounts: [], categories: [], me: null };
+async function loadAccounts() {
+  cache.accounts = await api("accounts");
+  const label = (a) => `${a.label} (${a.institution}${a.account_ref_last4 ? " ···" + a.account_ref_last4 : ""})`;
+  const make = (sel, opts) => {
     const keep = sel.value;
-    sel.replaceChildren(...(id === "tx-account" ? [el("option", { value: "", text: "All accounts" })] : []), ...options.map(o => o.cloneNode(true)));
-    if (keep) sel.value = keep;
-  }
-}
-
-async function loadCategories() {
-  const rows = await api("transactions");
-  const cats = [...new Set(rows.map(r => r.category))].sort();
-  state.categories = cats;
-  const sel = document.getElementById("tx-category");
-  sel.replaceChildren(el("option", { value: "", text: "All categories" }), ...cats.map(c => el("option", { value: c, text: c })));
-}
-
-async function loadOverview() {
-  await loadAccountsCache();
-  const rows = await api("summary/monthly");
-  const years = [...new Set(rows.map(r => r.month.slice(0, 4)))].sort().reverse();
-  const yearSel = document.getElementById("ov-year");
-  const current = yearSel.value || String(new Date().getFullYear());
-  const yearList = years.length ? years : [current];
-  yearSel.replaceChildren(...yearList.map(y => el("option", { value: y, text: y })));
-  yearSel.value = yearList.includes(current) ? current : yearList[0];
-  const year = yearSel.value;
-  const inYear = rows.filter(r => r.month.startsWith(year));
-
-  const months = [...new Set(inYear.map(r => r.month))].sort();
-  const cats = [...new Set(inYear.map(r => r.category))].sort();
-  const cell = (m, c) => {
-    const r = inYear.find(x => x.month === m && x.category === c);
-    return r ? Number(r.expenses) : 0;
+    sel.replaceChildren(...opts.map(o => el("option", { value: o.value, text: o.text })));
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
   };
-  const monthTotals = months.map(m => inYear.filter(r => r.month === m).reduce((s, r) => s + Number(r.expenses), 0));
-  const head = el("tr", {}, [el("th", { text: "Category" }), ...months.map(m => el("th", { class: "num", text: m.slice(5) + "/" + m.slice(2, 4) })), el("th", { class: "num", text: "Total" })]);
-  const body = cats.map(c => {
-    const vals = months.map(m => cell(m, c));
-    const total = vals.reduce((a, b) => a + b, 0);
-    return el("tr", {}, [el("td", { text: c }), ...vals.map(v => el("td", { class: "num", text: v ? eur.format(v) : "–" })), el("td", { class: "num", text: eur.format(total) })]);
-  });
-  const totalRow = el("tr", { class: "total" }, [el("td", { text: "Total" }), ...monthTotals.map(v => el("td", { class: "num", text: eur.format(v) })), el("td", { class: "num", text: eur.format(monthTotals.reduce((a, b) => a + b, 0)) })]);
-  const table = el("table", {}, [el("thead", {}, head), el("tbody", {}, [...body, ...(cats.length ? [totalRow] : [])])]);
-  document.getElementById("ov-table").replaceChildren(months.length ? table : el("p", { class: "muted", text: "No accepted statements for this year yet." }));
-  document.getElementById("ov-note").textContent = "Expenses only, accepted statements. Reviewed statements are not counted.";
-
-  const incomeRows = months.map(m => {
-    const v = inYear.filter(r => r.month === m).reduce((s, r) => s + Number(r.income), 0);
-    return el("tr", {}, [el("td", { text: m }), el("td", { class: "num pos", text: eur.format(v) })]);
-  });
-  document.getElementById("ov-income").replaceChildren(incomeRows.length
-    ? el("table", {}, [el("thead", {}, el("tr", {}, [el("th", { text: "Month" }), el("th", { class: "num", text: "Income" })])), el("tbody", {}, incomeRows)])
-    : el("p", { class: "muted", text: "No income recorded." }));
+  make($("tx-account"), [{ value: "", text: lang === "pt" ? "Todas" : "All accounts" }, ...cache.accounts.map(a => ({ value: a.id, text: label(a) }))]);
+  make($("up-account"), [{ value: "", text: lang === "pt" ? "Detetar automaticamente" : "Detect automatically" }, ...cache.accounts.filter(a => a.is_owner).map(a => ({ value: a.id, text: label(a) }))]);
+  return cache.accounts;
 }
-document.getElementById("ov-year").addEventListener("change", () => loadOverview().catch(e => toast(e.message)));
+async function loadCategories() {
+  cache.categories = (await api("categories")).map(c => c.name);
+  const fill = (sel, withAll) => {
+    const keep = sel.value;
+    const opts = [];
+    if (withAll) opts.push(el("option", { value: "", text: lang === "pt" ? "Todas" : "All categories" }));
+    for (const c of cache.categories) opts.push(el("option", { value: c, text: c }));
+    sel.replaceChildren(...opts);
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+  };
+  fill($("tx-category"), true);
+  fill($("bd-category"), false);
+  fill($("rl-category"), false);
+  return cache.categories;
+}
+async function refreshReviewBadge() {
+  try {
+    const rows = await api("review");
+    const b = $("review-count");
+    b.textContent = rows.length; b.classList.toggle("hidden", rows.length === 0);
+  } catch (e) {}
+}
 
-async function loadTransactions() {
-  await loadAccountsCache();
-  await loadCategories();
-  const params = new URLSearchParams();
-  const acc = document.getElementById("tx-account").value;
-  const cat = document.getElementById("tx-category").value;
-  const start = document.getElementById("tx-start").value;
-  const end = document.getElementById("tx-end").value;
-  if (acc) params.set("account_id", acc);
-  if (cat) params.set("category", cat);
-  if (start) params.set("start", start);
-  if (end) params.set("end", end);
-  const rows = await api("transactions?" + params.toString());
-  document.getElementById("tx-count").textContent = `${rows.length} transactions`;
-  if (!rows.length) {
-    document.getElementById("tx-table").replaceChildren(el("p", { class: "muted", text: "No transactions match." }));
-    return;
+/* ---------- overview ---------- */
+async function loadYears(sel, current) {
+  const years = await api("summary/years");
+  const list = years.length ? years : [new Date().getFullYear()];
+  const keep = current || sel.value;
+  sel.replaceChildren(...list.map(y => el("option", { value: y, text: String(y) })));
+  sel.value = list.map(String).includes(String(keep)) ? String(keep) : String(list[0]);
+  return sel.value;
+}
+LOADERS.overview = async () => {
+  await loadAccounts(); await loadCategories();
+  const year = await loadYears($("ov-year"));
+  await loadYears($("ex-year"), year);
+  const rows = await api("summary/monthly?year=" + year);
+  const months = [...new Set(rows.map(r => r.month))].sort();
+  const cats = [...new Set(rows.map(r => r.category))].sort();
+  const exp = (m, c) => { const r = rows.find(x => x.month === m && x.category === c); return r ? Number(r.expenses) : 0; };
+  const monthTotal = (m) => rows.filter(r => r.month === m).reduce((s, r) => s + Number(r.expenses), 0);
+
+  const max = Math.max(1, ...months.map(monthTotal));
+  $("ov-chart").replaceChildren(...(months.length ? months.map(m => el("div", { class: "col", title: `${m}: ${money(monthTotal(m))}` }, [
+    el("i", { style: `height:${(monthTotal(m) / max * 100).toFixed(1)}%` }),
+    el("span", { text: m.slice(5) }),
+  ])) : [el("p", { class: "muted", text: lang === "pt" ? "Sem dados para este ano." : "No data for this year." })]));
+
+  if (!months.length) {
+    $("ov-table").replaceChildren(el("p", { class: "muted", text: lang === "pt" ? "Sem extratos aceites neste ano." : "No accepted statements for this year." }));
+  } else {
+    const head = el("tr", {}, [el("th", { text: t("category") }), ...months.map(m => el("th", { class: "num", text: m.slice(5) + "/" + m.slice(2, 4) })), el("th", { class: "num", text: lang === "pt" ? "Total" : "Total" })]);
+    const body = cats.map(c => {
+      const vals = months.map(m => exp(m, c));
+      return el("tr", {}, [el("td", { text: c }), ...vals.map(v => el("td", { class: "num", text: v ? eur.format(v) : "–" })), el("td", { class: "num", text: eur.format(vals.reduce((a, b) => a + b, 0)) })]);
+    });
+    const totals = el("tr", { class: "total" }, [el("td", { text: lang === "pt" ? "Total" : "Total" }), ...months.map(m => el("td", { class: "num", text: eur.format(monthTotal(m)) })), el("td", { class: "num", text: eur.format(months.reduce((s, m) => s + monthTotal(m), 0)) })]);
+    $("ov-table").replaceChildren(el("table", {}, [el("thead", {}, head), el("tbody", {}, [...body, totals])]));
   }
-  const accLabel = Object.fromEntries(state.accounts.map(a => [a.id, a.label]));
-  const body = rows.map(t => {
-    const amt = Number(t.amount);
-    return el("tr", {}, [
-      el("td", { text: t.booked_on }),
-      el("td", { class: "desc", text: t.description }),
-      el("td", { text: t.category }),
-      el("td", { text: accLabel[t.account_id] || String(t.account_id) }),
+  await loadBudgets();
+};
+
+async function loadBudgets() {
+  if (!$("bd-month").value) $("bd-month").value = new Date().toISOString().slice(0, 7);
+  const rows = await api("budgets?month=" + $("bd-month").value);
+  if (!rows.length) { $("bd-list").replaceChildren(el("p", { class: "muted", text: t("budget_none") })); return; }
+  $("bd-list").replaceChildren(...rows.map(b => {
+    const pct = Math.min(100, b.percent);
+    const status = b.status === "over" ? t("budget_over") : b.status === "near" ? t("budget_near") : "";
+    return el("div", { style: "margin:10px 0" }, [
+      el("div", { class: "toolbar", style: "justify-content:space-between" }, [
+        el("span", {}, [el("b", { text: b.category }), " ", el("span", { class: "muted", text: t("budget_spent", { spent: money(b.spent), limit: money(b.monthly_limit) }) }), status ? el("span", { class: b.status === "over" ? "neg" : "muted", text: "  · " + status }) : null]),
+        el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+          if (!(await confirmBox(t("delete_confirm")))) return;
+          try { await api("budgets/" + b.id, { method: "DELETE" }); loadBudgets(); } catch (e) { toast("error", errorText(e)); }
+        } } }),
+      ]),
+      el("div", { class: "bar " + b.status }, el("i", { style: `width:${pct}%` })),
+    ]);
+  }));
+}
+$("bd-month").addEventListener("change", () => loadBudgets().catch(e => toast("error", errorText(e))));
+$("bd-save").addEventListener("click", async () => {
+  const category = $("bd-category").value, limit = $("bd-limit").value;
+  if (!category || !(Number(limit) > 0)) { toast("warn", lang === "pt" ? "Escolha uma categoria e um limite." : "Choose a category and a limit."); return; }
+  try {
+    await api("budgets", { method: "PUT", json: { category, monthly_limit: Number(limit).toFixed(2) } });
+    $("bd-limit").value = ""; toast("success", t("saved")); loadBudgets();
+  } catch (e) { toast("error", errorText(e)); }
+});
+
+async function download(path, filename) {
+  try {
+    const r = await fetch(API + path, { credentials: "same-origin" });
+    if (!r.ok) throw new Error(t("err_generic", { status: r.status }));
+    const url = URL.createObjectURL(await r.blob());
+    const a = el("a", { href: url, download: filename });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) { toast("error", errorText(e)); }
+}
+$("ex-csv").addEventListener("click", () => download("export/transactions.csv", "transactions.csv"));
+$("ex-xlsx").addEventListener("click", () => download("export/transactions.xlsx", "transactions.xlsx"));
+$("ex-pdf").addEventListener("click", () => download("export/report.pdf?year=" + $("ex-year").value, "report-" + $("ex-year").value + ".pdf"));
+$("ex-json").addEventListener("click", () => download("export/backup.json", "finance-backup.json"));
+
+/* ---------- transactions ---------- */
+let txPage = 0; const PAGE = 100; let txTotal = 0;
+function txQuery(offset) {
+  const p = new URLSearchParams();
+  const map = { account_id: $("tx-account").value, category: $("tx-category").value, transfers: $("tx-transfers").value,
+                q: $("tx-q").value.trim(), start: $("tx-start").value, end: $("tx-end").value };
+  for (const [k, v] of Object.entries(map)) if (v) p.set(k, v);
+  p.set("limit", PAGE); p.set("offset", offset);
+  return p.toString();
+}
+LOADERS.transactions = async () => {
+  await loadAccounts(); await loadCategories();
+  const data = await api("transactions?" + txQuery(txPage * PAGE));
+  txTotal = data.total;
+  $("tx-count").textContent = (lang === "pt" ? `${txTotal} movimentos` : `${txTotal} transactions`);
+  $("tx-page").textContent = txTotal ? `${txPage * PAGE + 1}–${Math.min(txTotal, (txPage + 1) * PAGE)} / ${txTotal}` : "";
+  $("tx-prev").disabled = txPage === 0;
+  $("tx-next").disabled = (txPage + 1) * PAGE >= txTotal;
+  if (!data.items.length) { $("tx-table").replaceChildren(el("p", { class: "muted", text: t("no_transactions") })); return; }
+  const rows = data.items.map(tx => {
+    const amt = Number(tx.amount);
+    const catSelect = el("select", { "aria-label": t("category"), on: { change: async (ev) => {
+      await changeCategory(tx, ev.target.value);
+    } } }, cache.categories.map(c => el("option", { value: c, text: c, selected: c === tx.category ? "selected" : null })));
+    if (!cache.categories.includes(tx.category)) catSelect.prepend(el("option", { value: tx.category, text: tx.category, selected: "selected" }));
+    const transferBtn = el("button", { class: "small", text: tx.is_transfer ? t("unmark_transfer") : t("mark_transfer"), on: { click: async () => {
+      try {
+        await api("transactions/" + tx.id, { method: "PATCH", json: { is_transfer: !tx.is_transfer } });
+        LOADERS.transactions();
+      } catch (e) { toast("error", errorText(e)); }
+    } } });
+    return el("tr", { class: tx.is_transfer ? "transfer" : "" }, [
+      el("td", { text: tx.booked_on }),
+      el("td", { class: "desc", text: tx.description }),
+      el("td", { class: "cat" }, catSelect),
+      el("td", { text: tx.account }),
       el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
+      el("td", {}, transferBtn),
     ]);
   });
-  document.getElementById("tx-table").replaceChildren(el("table", {}, [
-    el("thead", {}, el("tr", {}, ["Date", "Description", "Category", "Account", "Amount"].map((h, i) => el("th", { class: i === 4 ? "num" : "", text: h })))),
-    el("tbody", {}, body),
+  $("tx-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [
+      el("th", { text: lang === "pt" ? "Data" : "Date" }), el("th", { text: lang === "pt" ? "Descrição" : "Description" }),
+      el("th", { text: t("category") }), el("th", { text: t("account") }), el("th", { class: "num", text: lang === "pt" ? "Valor" : "Amount" }), el("th", { text: t("transfers") }),
+    ])),
+    el("tbody", {}, rows),
   ]));
-}
-["tx-account", "tx-category", "tx-start", "tx-end"].forEach(id => document.getElementById(id).addEventListener("change", () => loadTransactions().catch(e => toast(e.message))));
-document.getElementById("tx-apply").addEventListener("click", () => loadTransactions().catch(e => toast(e.message)));
-document.getElementById("tx-csv").addEventListener("click", async () => {
-  try {
-    const r = await fetch(API + "export/transactions.csv", { credentials: "same-origin" });
-    if (!r.ok) throw new Error(`Error ${r.status}`);
-    const url = URL.createObjectURL(await r.blob());
-    const a = el("a", { href: url, download: "transactions.csv" });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) { toast(e.message); }
-});
+};
 
-document.getElementById("up-go").addEventListener("click", async () => {
-  const file = document.getElementById("up-file").files[0];
-  const account = document.getElementById("up-account").value;
-  const out = document.getElementById("up-result");
-  if (!file || !account) { toast("Choose an account and a PDF"); return; }
-  const btn = document.getElementById("up-go");
-  btn.disabled = true; out.textContent = "Importing…";
+async function changeCategory(tx, category) {
   try {
-    const form = new FormData();
-    form.append("account_id", account);
-    form.append("file", file, file.name);
-    const pw = document.getElementById("up-pw").value;
-    if (pw) form.append("pdf_password", pw);
-    const res = await api("statements", { method: "POST", body: form });
-    const cls = res.status === "accepted" ? "ok" : "warning";
-    out.replaceChildren(
-      el("span", { class: "pill " + cls, text: res.status === "accepted" ? "Accepted" : "Needs review" }),
-      el("span", { class: "muted", text: `  ${res.transaction_count} transactions · reconciliation ${res.reconciliation} · difference ${res.difference}` }),
+    await api("transactions/" + tx.id, { method: "PATCH", json: { category } });
+  } catch (e) { toast("error", errorText(e)); return; }
+  let similar = [];
+  try { similar = await api(`transactions/${tx.id}/similar`); } catch (e) {}
+  if (!similar.length) { toast("success", t("saved")); return; }
+  const key = (tx.description.split(/\s+/).filter(w => w.length > 2).slice(0, 2).join(" ")) || tx.description;
+  const choice = await modal((box, done) => {
+    const boxes = similar.map(s => {
+      const cb = el("input", { type: "checkbox", checked: "checked", value: s.id });
+      return { cb, row: el("label", {}, [cb, el("span", { text: `${s.booked_on}  ${s.description}  ${money(s.amount)}  (${s.category})` })]) };
+    });
+    const saveRule = el("input", { type: "checkbox", checked: "checked" });
+    box.append(
+      el("h2", { text: t("similar_title") }),
+      el("p", { class: "muted", text: t("similar_note", { category }) }),
+      el("div", { class: "check-list" }, boxes.map(b => b.row)),
+      el("label", { style: "margin-top:12px" }, [saveRule, el("span", { text: " " + t("save_rule_for", { text: key }) })]),
+      el("div", { class: "actions" }, [
+        el("button", { text: t("skip"), on: { click: () => done(null) } }),
+        el("button", { class: "primary", text: t("apply_selected"), on: { click: () => done({ ids: boxes.filter(b => b.cb.checked).map(b => Number(b.cb.value)), rule: saveRule.checked }) } }),
+      ]),
     );
-    if (res.notes && res.notes.length) out.append(el("ul", { class: "muted" }, res.notes.map(n => el("li", { text: n }))));
-    document.getElementById("up-file").value = "";
-    document.getElementById("up-pw").value = "";
-  } catch (e) {
-    out.replaceChildren(el("span", { class: e.code === "password_required" ? "warning" : "neg", text: e.message }));
-  } finally { btn.disabled = false; }
+  });
+  if (!choice) return;
+  try {
+    const r = await api("transactions/bulk-category", { method: "POST", json: {
+      ids: choice.ids, category, save_rule: choice.rule ? key : null } });
+    toast("success", t("bulk_updated", { n: r.updated }), choice.rule ? t("rule_saved") : "");
+    if (choice.ids.length) LOADERS.transactions();
+  } catch (e) { toast("error", errorText(e)); }
+}
+
+$("tx-apply").addEventListener("click", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); });
+["tx-account", "tx-category", "tx-transfers", "tx-start", "tx-end"].forEach(id => $(id).addEventListener("change", () => { txPage = 0; LOADERS.transactions().catch(e => toast("error", errorText(e))); }));
+$("tx-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { txPage = 0; LOADERS.transactions().catch(() => {}); } });
+$("tx-prev").addEventListener("click", () => { txPage = Math.max(0, txPage - 1); LOADERS.transactions().catch(() => {}); });
+$("tx-next").addEventListener("click", () => { txPage += 1; LOADERS.transactions().catch(() => {}); });
+$("tx-detect").addEventListener("click", detectTransfers);
+$("st-detect").addEventListener("click", detectTransfers);
+async function detectTransfers() {
+  try {
+    const r = await api("transfers/detect", { method: "POST" });
+    toast("success", t("detect_done", { n: r.pairs }));
+    if (currentTab === "transactions") LOADERS.transactions();
+  } catch (e) { toast("error", errorText(e)); }
+}
+
+/* ---------- import (multi-file, toasts, password and account prompts) ---------- */
+function promptPassword(file) {
+  return modal((box, done) => {
+    const input = el("input", { type: "password", autocomplete: "off" });
+    box.append(
+      el("h2", { text: t("password_title", { file: file.name }) }),
+      el("p", { class: "muted", text: t("password_note") }),
+      el("label", { text: t("password") }), input,
+      el("div", { class: "actions" }, [
+        el("button", { text: t("skip_file"), on: { click: () => done(null) } }),
+        el("button", { class: "primary", text: t("ok"), on: { click: () => done(input.value || null) } }),
+      ]),
+    );
+    setTimeout(() => input.focus(), 50);
+  });
+}
+function chooseAccount(file, options) {
+  return modal((box, done) => {
+    const list = options.map(o => {
+      const rb = el("input", { type: "radio", name: "acct", value: o.id });
+      return el("label", {}, [rb, el("span", { text: ` ${o.label}${o.account_ref_last4 ? " ···" + o.account_ref_last4 : ""}` })]);
+    });
+    box.append(
+      el("h2", { text: t("choose_account_title") }),
+      el("p", { class: "muted", text: t("choose_account_note", { file: file.name }) }),
+      el("div", { class: "check-list" }, list),
+      el("div", { class: "actions" }, [
+        el("button", { text: t("skip_file"), on: { click: () => done(null) } }),
+        el("button", { class: "primary", text: t("ok"), on: { click: () => {
+          const picked = list.map(l => l.querySelector("input")).find(i => i.checked);
+          done(picked ? picked.value : null);
+        } } }),
+      ]),
+    );
+  });
+}
+
+async function uploadOne(file, accountId, password) {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (accountId) form.append("account_id", accountId);
+  if (password) form.append("pdf_password", password);
+  return api("statements", { method: "POST", body: form });
+}
+
+$("up-go").addEventListener("click", async () => {
+  const files = [...$("up-files").files];
+  if (!files.length) { toast("warn", lang === "pt" ? "Escolha pelo menos um PDF." : "Choose at least one PDF."); return; }
+  const accountId = $("up-account").value || null;
+  const queue = $("up-queue");
+  queue.replaceChildren();
+  $("up-go").disabled = true;
+  const counts = { ok: 0, dup: 0, err: 0 };
+  const lines = new Map(files.map(f => [f, el("li", {}, [el("b", { text: f.name }), " ", el("span", { class: "muted", text: t("uploading") })])]));
+  queue.replaceChildren(...lines.values());
+
+  for (const file of files) {
+    const line = lines.get(file);
+    const setLine = (text, cls) => line.replaceChildren(el("b", { text: file.name }), " ", el("span", { class: cls || "muted", text }));
+    let password = null, account = accountId, attempts = 0;
+    while (attempts < 4) {
+      attempts++;
+      try {
+        const res = await uploadOne(file, account, password);
+        counts.ok++;
+        const text = res.status === "accepted" ? t("result_accepted", { n: res.transaction_count }) : t("result_review", { n: res.transaction_count });
+        setLine(text, res.status === "accepted" ? "pos" : "warn");
+        toast(res.status === "accepted" ? "success" : "warn", file.name, text);
+        break;
+      } catch (e) {
+        if (e.code === "password_required") {
+          const pw = await promptPassword(file);
+          if (!pw) { counts.err++; setLine(errorText(e), "neg"); toast("error", file.name, errorText(e)); break; }
+          password = pw; continue;
+        }
+        if (e.code === "account_needed") {
+          const options = e.data.accounts || [];
+          if (!options.length) {
+            counts.err++; setLine(t("no_account_match"), "neg"); toast("error", file.name, t("no_account_match"), 8000); break;
+          }
+          const picked = await chooseAccount(file, options);
+          if (!picked) { counts.err++; setLine(errorText(e), "neg"); break; }
+          account = picked; continue;
+        }
+        if (e.code === "duplicate") {
+          counts.dup++; setLine(t("already"), "warn"); toast("warn", file.name, t("already")); break;
+        }
+        counts.err++;
+        setLine(errorText(e), "neg");
+        toast("error", file.name, errorText(e), 8000);
+        break;
+      }
+    }
+  }
+  $("up-summary").textContent = t("summary_done", { ok: counts.ok, dup: counts.dup, err: counts.err });
+  $("up-files").value = "";
+  $("up-go").disabled = false;
+  refreshReviewBadge();
+  loadAccounts().catch(() => {});
 });
 
-async function loadReview() {
+LOADERS.import = async () => { await loadAccounts(); };
+
+/* ---------- review ---------- */
+LOADERS.review = async () => {
   const rows = await api("review");
-  document.getElementById("review-count").textContent = rows.length ? `(${rows.length})` : "";
-  const accLabel = await accountLabels();
-  if (!rows.length) {
-    document.getElementById("rv-table").replaceChildren(el("p", { class: "muted", text: "Nothing waiting for review." }));
-    return;
-  }
-  const body = rows.map(s => {
-    const accept = el("button", { class: "primary", text: "Accept" });
-    const reject = el("button", { class: "danger", text: "Delete" });
-    accept.addEventListener("click", async () => {
-      try { await api(`statements/${s.id}/accept`, { method: "POST" }); toast("Accepted"); loadReview(); }
-      catch (e) { toast(e.message); }
-    });
-    reject.addEventListener("click", async () => {
-      if (!confirm("Delete this statement and its PDF?")) return;
-      try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("Deleted"); loadReview(); }
-      catch (e) { toast(e.message); }
-    });
-    return el("tr", {}, [
-      el("td", { text: accLabel[s.account_id] || String(s.account_id) }),
+  $("review-count").textContent = rows.length; $("review-count").classList.toggle("hidden", rows.length === 0);
+  if (!rows.length) { $("rv-table").replaceChildren(el("p", { class: "muted", text: t("nothing_review") })); return; }
+  $("rv-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, ["Account", "File", "Period", "Check", "Notes", ""].map(h => el("th", { text: h })))),
+    el("tbody", {}, rows.map(s => el("tr", {}, [
+      el("td", { text: s.account }),
       el("td", { class: "desc", text: s.original_name }),
       el("td", { text: s.period.join(" → ") }),
       el("td", {}, el("span", { class: "pill " + s.reconciliation, text: s.reconciliation })),
       el("td", { class: "desc muted", text: s.notes.join("; ") }),
-      el("td", {}, el("div", { class: "actions" }, [accept, reject])),
-    ]);
-  });
-  document.getElementById("rv-table").replaceChildren(el("table", {}, [
-    el("thead", {}, el("tr", {}, ["Account", "File", "Period", "Check", "Notes", ""].map(h => el("th", { text: h })))),
-    el("tbody", {}, body),
+      el("td", {}, el("div", { class: "toolbar" }, [
+        el("button", { class: "small primary", text: lang === "pt" ? "Aceitar" : "Accept", on: { click: async () => {
+          try { await api(`statements/${s.id}/accept`, { method: "POST" }); toast("success", t("saved")); LOADERS.review(); LOADERS.transactions && currentTab === "transactions" && LOADERS.transactions(); }
+          catch (e) { toast("error", errorText(e)); }
+        } } }),
+        el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+          if (!(await confirmBox(t("delete_statement_confirm")))) return;
+          try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.review(); }
+          catch (e) { toast("error", errorText(e)); }
+        } } }),
+      ])),
+    ]))),
   ]));
-}
+};
 
-async function accountLabels() {
-  if (!state.accounts.length) state.accounts = await api("accounts");
-  return Object.fromEntries(state.accounts.map(a => [a.id, a.label]));
-}
+/* ---------- rules and categories ---------- */
+LOADERS.rules = async () => {
+  await loadCategories();
+  const rules = await api("rules");
+  $("rl-table").replaceChildren(rules.length ? el("table", {}, [
+    el("thead", {}, el("tr", {}, [el("th", { text: t("description_contains") }), el("th", { text: t("category") }), el("th", {})])),
+    el("tbody", {}, rules.map(r => el("tr", {}, [
+      el("td", { text: r.contains }), el("td", { text: r.category }),
+      el("td", {}, el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+        if (!(await confirmBox(t("delete_rule_confirm")))) return;
+        try { await api("rules/" + r.id, { method: "DELETE" }); LOADERS.rules(); } catch (e) { toast("error", errorText(e)); }
+      } } })),
+    ]))),
+  ]) : el("p", { class: "muted", text: t("no_rules") }));
 
-async function loadAccounts() {
-  await loadAccountsCache();
-  if (!state.accounts.length) {
-    document.getElementById("ac-table").replaceChildren(el("p", { class: "muted", text: "No accounts yet. Create one below." }));
-    return;
-  }
-  const body = state.accounts.map(a => el("tr", {}, [
-    el("td", { text: a.label }), el("td", { text: a.institution }),
-    el("td", { text: a.account_ref_last4 ? "•••• " + a.account_ref_last4 : "" }),
-    el("td", { text: a.currency }), el("td", { text: a.is_owner ? "You" : "Shared by " + a.owner }),
+  const cats = await api("categories");
+  $("cat-table").replaceChildren(el("table", {}, [
+    el("tbody", {}, cats.map(c => el("tr", {}, [
+      el("td", { text: c.name }),
+      el("td", { class: "num" }, el("div", { class: "toolbar", style: "justify-content:flex-end" }, [
+        el("button", { class: "small", text: t("rename"), on: { click: async () => {
+          const name = prompt(t("rename_prompt"), c.name);
+          if (!name || name.trim() === c.name) return;
+          try {
+            if (c.id) await api("categories/" + c.id, { method: "PATCH", json: { name: name.trim() } });
+            else await api("categories", { method: "POST", json: { name: name.trim() } });
+            LOADERS.rules(); toast("success", t("saved"));
+          } catch (e) { toast("error", errorText(e)); }
+        } } }),
+        el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+          if (!c.id) { toast("warn", t("cat_none")); return; }
+          if (!(await confirmBox(t("delete_category_confirm", { name: c.name })))) return;
+          try { await api("categories/" + c.id, { method: "DELETE" }); LOADERS.rules(); toast("success", t("deleted")); }
+          catch (e) { toast("error", errorText(e)); }
+        } } }),
+      ])),
+    ]))),
   ]));
-  document.getElementById("ac-table").replaceChildren(el("table", {}, [
-    el("thead", {}, el("tr", {}, ["Label", "Institution", "Card / account", "Currency", "Owner"].map(h => el("th", { text: h })))),
-    el("tbody", {}, body),
-  ]));
-}
-
-document.getElementById("ac-create").addEventListener("click", async () => {
-  const body = {
-    institution: document.getElementById("ac-institution").value.trim().toLowerCase(),
-    label: document.getElementById("ac-label").value.trim(),
-    account_ref_last4: document.getElementById("ac-last4").value.trim(),
-  };
-  if (!body.institution || !body.label) { toast("Institution and label are required"); return; }
+};
+$("rl-save").addEventListener("click", async () => {
+  const contains = $("rl-contains").value.trim(), category = $("rl-category").value;
+  if (contains.length < 2 || !category) { toast("warn", lang === "pt" ? "Escreva um texto com pelo menos 2 caracteres." : "Enter at least 2 characters."); return; }
   try {
-    await api("accounts", { method: "POST", json: body });
-    toast("Account created");
-    ["ac-institution", "ac-label", "ac-last4"].forEach(id => (document.getElementById(id).value = ""));
-    loadAccounts();
-  } catch (e) { toast(e.message); }
+    const r = await api("rules", { method: "POST", json: { contains, category, apply: $("rl-apply").checked } });
+    toast("success", t("rule_saved"), t("rule_applied", { n: r.updated }));
+    $("rl-contains").value = ""; LOADERS.rules();
+  } catch (e) { toast("error", errorText(e)); }
+});
+$("cat-add").addEventListener("click", async () => {
+  const name = $("cat-new").value.trim();
+  if (!name) return;
+  try { await api("categories", { method: "POST", json: { name } }); $("cat-new").value = ""; toast("success", t("saved")); LOADERS.rules(); }
+  catch (e) { toast("error", errorText(e)); }
 });
 
-document.getElementById("sh-go").addEventListener("click", async () => {
-  const id = document.getElementById("sh-account").value;
-  const username = document.getElementById("sh-user").value.trim();
-  if (!id || !username) { toast("Choose an account and a username"); return; }
-  try {
-    await api(`accounts/${id}/shares`, { method: "POST", json: { username } });
-    toast(`Shared with ${username}`);
-    document.getElementById("sh-user").value = "";
-  } catch (e) { toast(e.message); }
-});
-
-async function loadPdfPasswords() {
-  const rows = await api("pdf-passwords");
-  const tbl = document.getElementById("pw-table");
-  if (!rows.length) { tbl.replaceChildren(el("p", { class: "muted", text: "No saved passwords." })); return; }
-  tbl.replaceChildren(el("table", {}, [
-    el("thead", {}, el("tr", {}, [el("th", { text: "Label" }), el("th", { text: "Saved" }), el("th", { text: "" })])),
-    el("tbody", {}, rows.map(r => {
-      const del = el("button", { class: "danger", text: "Delete" });
-      del.addEventListener("click", async () => {
-        if (!confirm("Delete this saved password?")) return;
-        try { await api(`pdf-passwords/${r.id}`, { method: "DELETE" }); toast("Deleted"); loadPdfPasswords(); }
-        catch (e) { toast(e.message); }
+/* ---------- accounts ---------- */
+LOADERS.accounts = async () => {
+  const accounts = await loadAccounts();
+  if (!accounts.length) { $("ac-table").replaceChildren(el("p", { class: "muted", text: lang === "pt" ? "Ainda não há contas." : "No accounts yet." })); return; }
+  $("ac-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [t("label"), t("bank"), t("last4"), t("household_short"), t("owner"), ""].map(h => el("th", { text: h })))),
+    el("tbody", {}, accounts.map(a => {
+      const household = el("input", { type: "checkbox", checked: a.household ? "checked" : null, disabled: a.is_owner ? null : "disabled" });
+      household.addEventListener("change", async () => {
+        try { await api("accounts/" + a.id, { method: "PATCH", json: { household: household.checked } }); toast("success", t("saved")); }
+        catch (e) { toast("error", errorText(e)); household.checked = !household.checked; }
       });
-      return el("tr", {}, [el("td", { text: r.label }), el("td", { text: r.created_at.slice(0, 10) }), el("td", {}, del)]);
+      const actions = [];
+      if (a.is_owner) {
+        actions.push(el("button", { class: "small", text: t("edit"), on: { click: async () => {
+          const last4 = prompt(t("last4"), a.account_ref_last4 || "");
+          if (last4 === null) return;
+          try { await api("accounts/" + a.id, { method: "PATCH", json: { account_ref_last4: last4.trim() } }); toast("success", t("saved")); LOADERS.accounts(); }
+          catch (e) { toast("error", errorText(e)); }
+        } } }));
+        actions.push(el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+          if (!(await confirmBox(t("delete_account_confirm")))) return;
+          try { await api("accounts/" + a.id, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.accounts(); }
+          catch (e) { toast("error", errorText(e)); }
+        } } }));
+        const shareInput = el("input", { placeholder: t("share_with"), style: "width:140px" });
+        actions.push(shareInput, el("button", { class: "small", text: t("share"), on: { click: async () => {
+          const u = shareInput.value.trim(); if (!u) return;
+          try { await api(`accounts/${a.id}/shares`, { method: "POST", json: { username: u } }); toast("success", t("saved")); shareInput.value = ""; }
+          catch (e) { toast("error", errorText(e)); }
+        } } }));
+      }
+      return el("tr", {}, [
+        el("td", { text: a.label }),
+        el("td", { text: a.institution }),
+        el("td", { text: a.account_ref_last4 ? "···" + a.account_ref_last4 : "" }),
+        el("td", {}, household),
+        el("td", { text: a.is_owner ? t("you") : t("shared_by", { owner: a.owner }) }),
+        el("td", {}, el("div", { class: "toolbar" }, actions)),
+      ]);
     })),
   ]));
-}
+};
+$("ac-create").addEventListener("click", async () => {
+  const body = {
+    institution: $("ac-institution").value.trim().toLowerCase(),
+    label: $("ac-label").value.trim(),
+    account_ref_last4: $("ac-last4").value.trim(),
+    household: $("ac-household").checked,
+  };
+  if (!body.institution || !body.label) { toast("warn", lang === "pt" ? "Banco e nome são obrigatórios." : "Bank and name are required."); return; }
+  try {
+    await api("accounts", { method: "POST", json: body });
+    toast("success", t("saved"));
+    ["ac-institution", "ac-label", "ac-last4"].forEach(id => ($(id).value = ""));
+    $("ac-household").checked = false;
+    LOADERS.accounts();
+  } catch (e) { toast("error", errorText(e)); }
+});
 
-document.getElementById("pw-add").addEventListener("click", async () => {
-  const label = document.getElementById("pw-label").value.trim();
-  const password = document.getElementById("pw-value").value;
-  if (!label || !password) { toast("Label and password are required"); return; }
+/* ---------- settings ---------- */
+async function loadPasswords() {
+  const rows = await api("pdf-passwords");
+  if (!rows.length) { $("pw-table").replaceChildren(el("p", { class: "muted", text: t("pw_none") })); return; }
+  $("pw-table").replaceChildren(el("table", {}, [el("tbody", {}, rows.map(r => el("tr", {}, [
+    el("td", { text: r.label }), el("td", { text: r.created_at.slice(0, 10) }),
+    el("td", { class: "num" }, el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+      if (!(await confirmBox(t("delete_password_confirm")))) return;
+      try { await api("pdf-passwords/" + r.id, { method: "DELETE" }); loadPasswords(); } catch (e) { toast("error", errorText(e)); }
+    } } })),
+  ])))]));
+}
+$("pw-add").addEventListener("click", async () => {
+  const label = $("pw-label").value.trim(), password = $("pw-value").value;
+  if (!label || !password) { toast("warn", lang === "pt" ? "Nome e palavra-passe são obrigatórios." : "Name and password are required."); return; }
   try {
     await api("pdf-passwords", { method: "POST", json: { label, password } });
-    document.getElementById("pw-label").value = "";
-    document.getElementById("pw-value").value = "";
-    toast("Password saved");
-    loadPdfPasswords();
-  } catch (e) { toast(e.message); }
+    $("pw-label").value = ""; $("pw-value").value = ""; toast("success", t("pw_added")); loadPasswords();
+  } catch (e) { toast("error", errorText(e)); }
 });
-
-async function loadSettings() {
-  loadPdfPasswords().catch(e => toast(e.message));
-  state.me = await api("me");
-  document.getElementById("st-user").textContent = state.me.username;
-  document.getElementById("st-scope").value = state.me.view_scope;
-}
-document.getElementById("st-save").addEventListener("click", async () => {
+LOADERS.settings = async () => {
+  loadPasswords().catch(e => toast("error", errorText(e)));
+  cache.me = await api("me");
+  $("st-user").textContent = cache.me.username;
+  $("st-scope").value = cache.me.view_scope;
+};
+$("st-lang").addEventListener("change", (e) => setLanguage(e.target.value));
+$("st-save").addEventListener("click", async () => {
   try {
-    await api("me/scope", { method: "PUT", json: { view_scope: document.getElementById("st-scope").value } });
-    toast("Saved");
-  } catch (e) { toast(e.message); }
+    await api("me/scope", { method: "PUT", json: { view_scope: $("st-scope").value } });
+    toast("success", t("scope_saved"));
+  } catch (e) { toast("error", errorText(e)); }
 });
 
+/* ---------- start ---------- */
 (async () => {
-  try {
-    await loadAccountsCache();
-    await loadOverview();
-    await loadReview().catch(() => {});
-  } catch (e) { toast(e.message); }
+  try { localStorage.getItem("finance-lang"); } catch (e) {}
+  applyLanguage();
+  const start = (location.hash || "#overview").slice(1);
+  const known = Object.keys(LOADERS).concat(["overview"]);
+  showTab(known.includes(start) ? start : "overview");
+  refreshReviewBadge();
 })();
 </script>
 </body>

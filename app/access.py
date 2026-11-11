@@ -1,9 +1,11 @@
-"""Who can see what.
+"""Who can see and change what.
 
-- An account is visible to its owner and to users it has been shared with.
-- A user's view scope narrows the accounts used in analytics and exports.
-  "own_shared" and "all" currently select the same accounts, because nothing is
-  visible to a user other than their own and shared accounts. See README.
+- Owner: full control of an account (edit, share, accept or delete its statements).
+- Shared user: sees the account and can correct transaction categories, but cannot accept
+  or delete statements or share it.
+- Household accounts: visible to users whose view scope is "all", even if not shared.
+- View scope narrows what analytics and listings show:
+  "own_shared": own and shared accounts. "all": those plus household accounts.
 """
 
 from __future__ import annotations
@@ -20,17 +22,27 @@ def shared_account_ids(user_id: int):
     return select(AccountShare.account_id).where(AccountShare.user_id == user_id)
 
 
-def accessible_accounts(session: Session, user: User) -> list[Account]:
-    stmt = select(Account).where(
-        or_(Account.owner_id == user.id, Account.id.in_(shared_account_ids(user.id)))
-    ).order_by(Account.id)
-    return list(session.scalars(stmt))
-
-
 def can_access(session: Session, user: User, account: Account) -> bool:
+    """Owner or shared: may read the account and correct its categories."""
     if account.owner_id == user.id:
         return True
     return session.get(AccountShare, (account.id, user.id)) is not None
+
+
+def is_owner(user: User, account: Account) -> bool:
+    return account.owner_id == user.id
+
+
+def visible_accounts(session: Session, user: User) -> list[Account]:
+    """What this user sees, given their view scope."""
+    conditions = [Account.owner_id == user.id, Account.id.in_(shared_account_ids(user.id))]
+    if user.view_scope == "all":
+        conditions.append(Account.household.is_(True))
+    return list(session.scalars(select(Account).where(or_(*conditions)).order_by(Account.id)))
+
+
+def can_see(session: Session, user: User, account: Account) -> bool:
+    return any(a.id == account.id for a in visible_accounts(session, user))
 
 
 def get_or_create_user(session: Session, username: str) -> User:
