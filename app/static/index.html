@@ -115,6 +115,8 @@ tr.total td { font-weight: 700; }
     </div>
     <label for="up-file">PDF statement</label>
     <input type="file" id="up-file" accept="application/pdf">
+    <label for="up-pw">PDF password (only if the PDF is protected and no saved password opens it)</label>
+    <input type="password" id="up-pw" autocomplete="off">
     <div style="margin-top:12px"><button class="primary" id="up-go">Import</button></div>
     <div id="up-result" style="margin-top:12px"></div>
   </div>
@@ -152,6 +154,16 @@ tr.total td { font-weight: 700; }
 </section>
 
 <section id="tab-settings">
+  <div class="card">
+    <h2>Saved PDF passwords</h2>
+    <p class="muted">Used automatically for protected statements. They are stored encrypted and never shown again.</p>
+    <div class="table-wrap" id="pw-table"></div>
+    <div class="row" style="margin-top:12px">
+      <div><label for="pw-label">Label</label><input id="pw-label" placeholder="Activo card"></div>
+      <div><label for="pw-value">Password</label><input type="password" id="pw-value" autocomplete="new-password"></div>
+      <div><button class="primary" id="pw-add">Save password</button></div>
+    </div>
+  </div>
   <div class="card">
     <h2>Who you see</h2>
     <div class="row">
@@ -208,8 +220,12 @@ async function api(path, opts = {}) {
   if (type.includes("application/json")) body = await r.json();
   if (!r.ok) {
     const detail = body && body.detail;
-    const text = typeof detail === "string" ? detail : (r.status === 401 ? "Not signed in" : `Error ${r.status}`);
-    throw new Error(text);
+    const err = new Error(
+      typeof detail === "string" ? detail
+      : detail && detail.message ? detail.message
+      : (r.status === 401 ? "Not signed in" : `Error ${r.status}`));
+    err.code = detail && detail.code;
+    throw err;
   }
   return body;
 }
@@ -340,6 +356,8 @@ document.getElementById("up-go").addEventListener("click", async () => {
     const form = new FormData();
     form.append("account_id", account);
     form.append("file", file, file.name);
+    const pw = document.getElementById("up-pw").value;
+    if (pw) form.append("pdf_password", pw);
     const res = await api("statements", { method: "POST", body: form });
     const cls = res.status === "accepted" ? "ok" : "warning";
     out.replaceChildren(
@@ -348,8 +366,9 @@ document.getElementById("up-go").addEventListener("click", async () => {
     );
     if (res.notes && res.notes.length) out.append(el("ul", { class: "muted" }, res.notes.map(n => el("li", { text: n }))));
     document.getElementById("up-file").value = "";
+    document.getElementById("up-pw").value = "";
   } catch (e) {
-    out.replaceChildren(el("span", { class: "neg", text: e.message }));
+    out.replaceChildren(el("span", { class: e.code === "password_required" ? "warning" : "neg", text: e.message }));
   } finally { btn.disabled = false; }
 });
 
@@ -436,7 +455,39 @@ document.getElementById("sh-go").addEventListener("click", async () => {
   } catch (e) { toast(e.message); }
 });
 
+async function loadPdfPasswords() {
+  const rows = await api("pdf-passwords");
+  const tbl = document.getElementById("pw-table");
+  if (!rows.length) { tbl.replaceChildren(el("p", { class: "muted", text: "No saved passwords." })); return; }
+  tbl.replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [el("th", { text: "Label" }), el("th", { text: "Saved" }), el("th", { text: "" })])),
+    el("tbody", {}, rows.map(r => {
+      const del = el("button", { class: "danger", text: "Delete" });
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this saved password?")) return;
+        try { await api(`pdf-passwords/${r.id}`, { method: "DELETE" }); toast("Deleted"); loadPdfPasswords(); }
+        catch (e) { toast(e.message); }
+      });
+      return el("tr", {}, [el("td", { text: r.label }), el("td", { text: r.created_at.slice(0, 10) }), el("td", {}, del)]);
+    })),
+  ]));
+}
+
+document.getElementById("pw-add").addEventListener("click", async () => {
+  const label = document.getElementById("pw-label").value.trim();
+  const password = document.getElementById("pw-value").value;
+  if (!label || !password) { toast("Label and password are required"); return; }
+  try {
+    await api("pdf-passwords", { method: "POST", json: { label, password } });
+    document.getElementById("pw-label").value = "";
+    document.getElementById("pw-value").value = "";
+    toast("Password saved");
+    loadPdfPasswords();
+  } catch (e) { toast(e.message); }
+});
+
 async function loadSettings() {
+  loadPdfPasswords().catch(e => toast(e.message));
   state.me = await api("me");
   document.getElementById("st-user").textContent = state.me.username;
   document.getElementById("st-scope").value = state.me.view_scope;

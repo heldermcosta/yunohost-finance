@@ -14,18 +14,22 @@ class PdfTextError(RuntimeError):
     pass
 
 
-def extract_layout_text(path: str | Path) -> str:
+class PdfPasswordError(PdfTextError):
+    """The PDF is protected, and the password given (or none) did not open it."""
+
+
+def extract_layout_text(path: str | Path, password: str | None = None) -> str:
+    command = ["pdftotext", "-layout", "-enc", "UTF-8"]
+    if password is not None:
+        command += ["-upw", password]
+    command += [str(path), "-"]
     try:
-        result = subprocess.run(
-            ["pdftotext", "-layout", "-enc", "UTF-8", str(path), "-"],
-            capture_output=True,
-            check=True,
-            timeout=60,
-        )
+        result = subprocess.run(command, capture_output=True, check=True, timeout=60)
     except FileNotFoundError as exc:
         raise PdfTextError("pdftotext is not installed (poppler-utils)") from exc
     except subprocess.CalledProcessError as exc:
-        raise PdfTextError(
-            f"pdftotext failed: {exc.stderr.decode(errors='replace').strip()}"
-        ) from exc
+        message = exc.stderr.decode(errors="replace").strip()
+        if "password" in message.lower() or "encrypt" in message.lower():
+            raise PdfPasswordError("PDF is password protected") from exc
+        raise PdfTextError(f"pdftotext failed: {message}") from exc
     return result.stdout.decode("utf-8", errors="replace")

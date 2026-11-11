@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, LargeBinary, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -56,6 +56,20 @@ class Statement(Base):
     reconciliation: Mapped[str] = mapped_column(String(10))  # ok | warning | failed
     notes: Mapped[str] = mapped_column(Text, default="")
     pdf_file: Mapped[str] = mapped_column(String(80))        # name inside the encrypted pdf dir
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+
+class PdfPassword(Base):
+    """A password that opens some of the owner's PDFs. Stored encrypted with the server key."""
+
+    __tablename__ = "pdf_passwords"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    label: Mapped[str] = mapped_column(String(120), default="")
+    sealed: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

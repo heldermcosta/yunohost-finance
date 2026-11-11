@@ -60,13 +60,18 @@ Requires `pdftotext` (poppler-utils) on the PATH.
 
 ## Security model
 
-- PDFs are encrypted at rest with AES-256-GCM. Each file is bound to its SHA-256.
+- Statement PDFs are stored as uploaded, without encryption, in the data directory. Back up
+  the data directory with the database.
+- PDF passwords are stored encrypted (AES-256-GCM) with the server key, and are never returned
+  by the API. Each user has their own saved passwords.
 - The key is created once with `O_EXCL` and mode 0600, and is never written to the database.
+  It is needed to open saved passwords and statements imported before plain storage (`.bin`).
+  Keep a copy off the server: without it, saved passwords cannot be decrypted.
 - Plain text from a PDF exists only in the work directory during extraction, then it is deleted.
 - Access: an account is visible to its owner and to users it was shared with. Only the owner
   can share, accept or delete a statement.
-- Authentication comes from the SSO header `Auth-User`. This must be verified against the
-  YunoHost SSOwat configuration before deployment.
+- Authentication comes from YunoHost SSO: SSOwat sends `Authorization: Basic` with the username,
+  and the app reads only the username. Never expose the app's port directly.
 
 ## Open decisions
 
