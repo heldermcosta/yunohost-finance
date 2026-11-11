@@ -153,7 +153,7 @@ tr.total:hover td { background: var(--card-2); }
 .bar.near > i { background: var(--warn); }
 .bar.over > i { background: var(--bad); }
 
-/* Period controls on the Overview: quick chips and a From / To pair of sliders */
+/* Period controls on the Overview: quick chips and one slider with two handles */
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 0; }
 .chip {
   min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
@@ -161,11 +161,31 @@ tr.total:hover td { background: var(--card-2); }
 }
 .chip:hover { color: var(--text); }
 .chip[aria-pressed="true"] { color: var(--accent); background: var(--soft); border-color: transparent; font-weight: 600; }
-.range { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 22px; margin-top: 14px; }
-.range label { margin: 0 0 4px; }
-.range-line { display: flex; align-items: center; gap: 12px; }
-.range input[type=range] { flex: 1 1 auto; min-width: 0; min-height: 0; height: 6px; padding: 0; border: 0; accent-color: var(--accent); cursor: pointer; background: transparent; }
-.range-value { min-width: 128px; text-align: right; font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dual-head { display: flex; justify-content: space-between; gap: 12px; margin: 16px 2px 0; font-size: 13px; flex-wrap: wrap; }
+.dual-tag { color: var(--muted); }
+.dual-head strong { font-variant-numeric: tabular-nums; }
+.dual { position: relative; height: 28px; margin: 4px 10px 0; }
+.dual-track, .dual-fill { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 999px; }
+.dual-track { left: 0; right: 0; background: var(--line); }
+.dual-fill { background: var(--accent); }
+.dual input[type=range] {
+  position: absolute; left: 0; top: 0; width: 100%; height: 28px; margin: 0; padding: 0; border: 0;
+  background: none; box-shadow: none; min-height: 0; pointer-events: none;
+  -webkit-appearance: none; appearance: none;
+}
+.dual input[type=range]:focus { box-shadow: none; outline: none; }
+.dual input[type=range]::-webkit-slider-runnable-track { background: transparent; height: 28px; }
+.dual input[type=range]::-moz-range-track { background: transparent; height: 28px; }
+.dual input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--card); border: 2px solid var(--accent); box-shadow: var(--shadow); cursor: grab; margin-top: 4px;
+}
+.dual input[type=range]::-moz-range-thumb {
+  pointer-events: auto; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--card); border: 2px solid var(--accent); box-shadow: var(--shadow); cursor: grab;
+}
+.dual input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--focus); }
+.dual input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--focus); }
 #ov-range-label { margin: 10px 0 0; }
 
 /* Column chart */
@@ -276,15 +296,15 @@ tr.cg-row td:first-child { width: 28px; }
         <p class="muted" id="ov-intro"></p></div>
     </div>
     <div class="chips" id="ov-chips" role="group" aria-label="Quick periods"></div>
-    <div class="range">
-      <div class="range-side">
-        <label for="ov-slider-start" id="ov-from-label">From</label>
-        <div class="range-line"><input type="range" id="ov-slider-start" min="0" max="23" step="1" value="0"><span class="range-value" id="ov-start-label"></span></div>
-      </div>
-      <div class="range-side">
-        <label for="ov-slider-end" id="ov-to-label">To</label>
-        <div class="range-line"><input type="range" id="ov-slider-end" min="0" max="23" step="1" value="23"><span class="range-value" id="ov-end-label"></span></div>
-      </div>
+    <div class="dual-head">
+      <span><span class="dual-tag" id="ov-from-label">From</span> <strong id="ov-start-label"></strong></span>
+      <span><span class="dual-tag" id="ov-to-label">To</span> <strong id="ov-end-label"></strong></span>
+    </div>
+    <div class="dual" id="ov-dual">
+      <div class="dual-track"></div>
+      <div class="dual-fill" id="ov-fill"></div>
+      <input type="range" id="ov-slider-start" min="0" max="23" step="1" value="0" aria-label="From month">
+      <input type="range" id="ov-slider-end" min="0" max="23" step="1" value="23" aria-label="To month">
     </div>
     <p class="muted" id="ov-range-label"></p>
     <input type="hidden" id="ov-start">
@@ -926,11 +946,22 @@ function setSliderDomain() {
   const max = String(monthsBetween(domainStart(), todayYM()));
   for (const id of ["ov-slider-start", "ov-slider-end"]) $(id).max = max;
 }
+// Paints the coloured stretch between the two handles, and lifts the handle that is at the far end.
+function updateDualFill() {
+  const max = Number($("ov-slider-end").max) || 1;
+  const lo = Number($("ov-slider-start").value), hi = Number($("ov-slider-end").value);
+  const fill = $("ov-fill");
+  fill.style.left = `${(lo / max) * 100}%`;
+  fill.style.width = `${Math.max(0, ((hi - lo) / max) * 100)}%`;
+  $("ov-slider-start").style.zIndex = lo === max ? 3 : 1;
+  $("ov-slider-end").style.zIndex = 2;
+}
 function syncPeriodLabels() {
   const start = $("ov-start").value, end = $("ov-month").value;
   if (!end) return;
   $("ov-slider-start").value = monthsBetween(domainStart(), start);
   $("ov-slider-end").value = monthsBetween(domainStart(), end);
+  updateDualFill();
   $("ov-start-label").textContent = monthLabel(start);
   $("ov-end-label").textContent = monthLabel(end);
   const n = monthsBetween(start, end) + 1;
@@ -982,8 +1013,19 @@ function applyOverviewText() {
   $("ov-to-label").textContent = L("To", "Até");
   renderChips();
 }
-$("ov-slider-start").addEventListener("input", () => { $("ov-start-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-start").value))); });
-$("ov-slider-end").addEventListener("input", () => { $("ov-end-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-end").value))); });
+// While a handle is dragged, its label and the fill follow it; the period loads on release.
+$("ov-slider-start").addEventListener("input", () => {
+  if (Number($("ov-slider-start").value) > Number($("ov-slider-end").value)) $("ov-slider-end").value = $("ov-slider-start").value;
+  $("ov-start-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-start").value)));
+  $("ov-end-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-end").value)));
+  updateDualFill();
+});
+$("ov-slider-end").addEventListener("input", () => {
+  if (Number($("ov-slider-end").value) < Number($("ov-slider-start").value)) $("ov-slider-start").value = $("ov-slider-end").value;
+  $("ov-start-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-start").value)));
+  $("ov-end-label").textContent = monthLabel(addMonths(domainStart(), Number($("ov-slider-end").value)));
+  updateDualFill();
+});
 $("ov-slider-start").addEventListener("change", () => setPeriod(addMonths(domainStart(), Number($("ov-slider-start").value)), $("ov-month").value, { moved: "start" }));
 $("ov-slider-end").addEventListener("change", () => setPeriod($("ov-start").value, addMonths(domainStart(), Number($("ov-slider-end").value)), { moved: "end" }));
 setSliderDomain();
