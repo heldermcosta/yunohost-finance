@@ -246,6 +246,10 @@ tr.total td { font-weight: 700; }
     <div class="table-wrap" id="ac-table"></div>
   </div>
   <div class="card">
+    <h2 data-i18n="statements_title">Statements</h2>
+    <div class="table-wrap" id="st-table"></div>
+  </div>
+  <div class="card">
     <h3 data-i18n="new_account">New account</h3>
     <div class="row">
       <div><label for="ac-institution" data-i18n="bank">Bank</label><input id="ac-institution" list="institutions" placeholder="activobank"></div>
@@ -317,7 +321,7 @@ en: {
   add_rule:"Add a rule", description_contains:"Description contains", apply_existing:"Apply to existing transactions", categories:"Categories",
   new_category:"New category", add:"Add", rename:"Rename", delete:"Delete", no_rules:"No rules yet.",
   accounts:"Accounts", new_account:"New account", bank:"Bank", label:"Name", last4:"Last 4 digits of the account number", household:"Household account", create:"Create",
-  household_short:"Household", owner:"Owner", you:"You", shared_by:"Shared by {owner}", share_with:"Share with (username)", share:"Share", unshare:"Remove", edit:"Edit",
+  household_short:"Household", statements_title:"Statements", statements_none:"No statements yet.", st_account:"Account", st_file:"File", st_period:"Period", st_status:"Status", st_count:"Transactions", bank_prompt:"Bank (for example activobank, bankinter)", owner:"Owner", you:"You", shared_by:"Shared by {owner}", share_with:"Share with (username)", share:"Share", unshare:"Remove", edit:"Edit",
   preferences:"Preferences", language:"Language", view_scope:"Accounts I see", scope_own:"Own and shared accounts", scope_all:"Also household accounts of other users",
   signed_in_as:"Signed in as", pdf_passwords:"Saved PDF passwords", pdf_pw_note:"Tried automatically on protected statements. Stored encrypted and never shown again.",
   password:"Password", transfers_title:"Transfers", transfers_note:"A transfer is a debit in one of your accounts matched with a credit of the same amount in another, within 5 days, with a transfer or card-payment description. Transfers are excluded from spending.",
@@ -337,7 +341,7 @@ en: {
   budget_none:"No budgets yet. Add one below.", budget_spent:"{spent} of {limit}", budget_over:"over", budget_near:"near",
   delete_category_confirm:"Delete category \"{name}\"? Its transactions become Uncategorised and its rules and budgets are removed.",
   delete_account_confirm:"Delete this account? Only possible when it has no statements.", delete_rule_confirm:"Delete this rule?",
-  delete_statement_confirm:"Delete this statement and its PDF?", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
+  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
   scope_saved:"Saved", detect_done:"{n} transfer pairs found", not_signed_in:"Not signed in",
   err_too_large:"The file is larger than 20 MB.", err_not_pdf:"This is not a PDF file.", err_no_parser:"No parser recognises this statement yet.",
   err_wrong_institution:"This statement is from another bank than the account.", err_wrong_account:"This statement belongs to another account.",
@@ -358,7 +362,7 @@ pt: {
   add_rule:"Adicionar uma regra", description_contains:"A descrição contém", apply_existing:"Aplicar aos movimentos existentes", categories:"Categorias",
   new_category:"Nova categoria", add:"Adicionar", rename:"Renomear", delete:"Apagar", no_rules:"Ainda não há regras.",
   accounts:"Contas", new_account:"Nova conta", bank:"Banco", label:"Nome", last4:"Últimos 4 dígitos do número da conta", household:"Conta do agregado", create:"Criar",
-  household_short:"Agregado", owner:"Titular", you:"Você", shared_by:"Partilhada por {owner}", share_with:"Partilhar com (utilizador)", share:"Partilhar", unshare:"Remover", edit:"Editar",
+  household_short:"Agregado", statements_title:"Extratos", statements_none:"Ainda não há extratos.", st_account:"Conta", st_file:"Ficheiro", st_period:"Período", st_status:"Estado", st_count:"Movimentos", bank_prompt:"Banco (por exemplo activobank, bankinter)", owner:"Titular", you:"Você", shared_by:"Partilhada por {owner}", share_with:"Partilhar com (utilizador)", share:"Partilhar", unshare:"Remover", edit:"Editar",
   preferences:"Preferências", language:"Idioma", view_scope:"Contas que vejo", scope_own:"Contas próprias e partilhadas", scope_all:"Também contas do agregado de outros utilizadores",
   signed_in_as:"Sessão iniciada como", pdf_passwords:"Palavras-passe de PDFs guardadas", pdf_pw_note:"Usadas automaticamente em extratos protegidos. Guardadas cifradas e nunca mostradas de novo.",
   password:"Palavra-passe", transfers_title:"Transferências", transfers_note:"Uma transferência é um débito numa das suas contas com um crédito do mesmo valor noutra, até 5 dias depois, com descrição de transferência ou pagamento de cartão. Não contam como despesa.",
@@ -378,7 +382,7 @@ pt: {
   budget_none:"Ainda não há orçamentos. Adicione um abaixo.", budget_spent:"{spent} de {limit}", budget_over:"excedido", budget_near:"perto",
   delete_category_confirm:"Apagar a categoria \"{name}\"? Os movimentos ficam sem categoria e as regras e orçamentos são removidos.",
   delete_account_confirm:"Apagar esta conta? Só é possível sem extratos.", delete_rule_confirm:"Apagar esta regra?",
-  delete_statement_confirm:"Apagar este extrato e o seu PDF?", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
+  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
   scope_saved:"Guardado", detect_done:"{n} pares de transferências encontrados", not_signed_in:"Sessão não iniciada",
   err_too_large:"O ficheiro tem mais de 20 MB.", err_not_pdf:"Não é um ficheiro PDF.", err_no_parser:"Ainda não há leitor para este extrato.",
   err_wrong_institution:"Este extrato é de outro banco que não o da conta.", err_wrong_account:"Este extrato pertence a outra conta.",
@@ -988,7 +992,28 @@ $("cat-add").addEventListener("click", async () => {
 });
 
 /* ---------- accounts ---------- */
+async function loadStatements() {
+  const rows = await api("statements");
+  if (!rows.length) { $("st-table").replaceChildren(el("p", { class: "muted", text: t("statements_none") })); return; }
+  $("st-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [t("st_account"), t("st_file"), t("st_period"), t("st_status"), t("st_count"), ""].map(h => el("th", { text: h })))),
+    el("tbody", {}, rows.map(s => el("tr", {}, [
+      el("td", { text: s.account }),
+      el("td", { class: "desc", text: s.original_name }),
+      el("td", { text: s.period.join(" → ") }),
+      el("td", {}, el("span", { class: "pill " + s.reconciliation, text: s.status + " · " + s.reconciliation })),
+      el("td", { text: String(s.transactions) }),
+      el("td", {}, s.can_delete ? el("button", { class: "small danger", text: t("delete"), on: { click: async () => {
+        if (!(await confirmBox(t("delete_statement_confirm")))) return;
+        try { await api(`statements/${s.id}`, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.accounts(); }
+        catch (e) { toast("error", errorText(e)); }
+      } } }) : ""),
+    ]))),
+  ]));
+}
+
 LOADERS.accounts = async () => {
+  loadStatements().catch(e => toast("error", errorText(e)));
   const accounts = await loadAccounts();
   if (!accounts.length) { $("ac-table").replaceChildren(el("p", { class: "muted", text: lang === "pt" ? "Ainda não há contas." : "No accounts yet." })); return; }
   $("ac-table").replaceChildren(el("table", {}, [
@@ -1002,9 +1027,11 @@ LOADERS.accounts = async () => {
       const actions = [];
       if (a.is_owner) {
         actions.push(el("button", { class: "small", text: t("edit"), on: { click: async () => {
+          const bank = prompt(t("bank_prompt"), a.institution || "");
+          if (bank === null) return;
           const last4 = prompt(t("last4"), a.account_ref_last4 || "");
           if (last4 === null) return;
-          try { await api("accounts/" + a.id, { method: "PATCH", json: { account_ref_last4: last4.trim() } }); toast("success", t("saved")); LOADERS.accounts(); }
+          try { await api("accounts/" + a.id, { method: "PATCH", json: { institution: bank.trim(), account_ref_last4: last4.trim() } }); toast("success", t("saved")); LOADERS.accounts(); }
           catch (e) { toast("error", errorText(e)); }
         } } }));
         actions.push(el("button", { class: "small danger", text: t("delete"), on: { click: async () => {

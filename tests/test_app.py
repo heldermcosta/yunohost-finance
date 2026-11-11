@@ -244,12 +244,50 @@ def test_only_owner_can_share(client):
     assert r.status_code == 404
 
 
-def test_accepted_statements_cannot_be_deleted_here(client, text_by_pdf):
+def test_accepted_statement_is_deleted_with_its_transactions_and_can_be_reimported(client, text_by_pdf):
     account_id = make_account(client, "helder")
-    pdf = b"%PDF-1.4 keep"
+    pdf = b"%PDF-1.4 delete-me"
     text_by_pdf[pdf] = basic_statement()
     statement_id = upload(client, "helder", account_id, pdf).json()["statement_id"]
-    assert client.delete(f"/api/statements/{statement_id}", headers=as_user("helder")).status_code == 409
+    before = client.get("/api/transactions", headers=as_user("helder")).json()["total"]
+    assert before > 0
+    r = client.delete(f"/api/statements/{statement_id}", headers=as_user("helder"))
+    assert r.status_code == 200, r.text
+    assert client.get("/api/transactions", headers=as_user("helder")).json()["total"] == 0
+    assert client.get("/api/statements", headers=as_user("helder")).json() == []
+    # The same file can be imported again after its deletion.
+    assert upload(client, "helder", account_id, pdf).status_code == 201
+
+
+def test_only_the_owner_can_delete_a_statement(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    assert client.post(f"/api/accounts/{account_id}/shares", headers=as_user("helder"),
+                       json={"username": "anna"}).status_code == 201
+    pdf = b"%PDF-1.4 owner-only"
+    text_by_pdf[pdf] = basic_statement()
+    statement_id = upload(client, "helder", account_id, pdf).json()["statement_id"]
+    assert client.delete(f"/api/statements/{statement_id}", headers=as_user("anna")).status_code == 403
+    listed = client.get("/api/statements", headers=as_user("anna")).json()
+    assert listed and listed[0]["can_delete"] is False
+
+
+def test_statement_list_shows_transaction_counts_and_owner_flag(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 listed"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    rows = client.get("/api/statements", headers=as_user("helder")).json()
+    assert len(rows) == 1
+    assert rows[0]["transactions"] > 0 and rows[0]["can_delete"] is True
+    assert rows[0]["status"] == "accepted"
+
+
+def test_account_bank_can_be_changed(client):
+    account_id = make_account(client, "helder")
+    r = client.patch(f"/api/accounts/{account_id}", headers=as_user("helder"), json={"institution": " Bankinter "})
+    assert r.status_code == 200, r.text
+    accounts = client.get("/api/accounts", headers=as_user("helder")).json()
+    assert [a["institution"] for a in accounts if a["id"] == account_id] == ["bankinter"]
 
 
 def test_unsigned_request_is_rejected(client):
