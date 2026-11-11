@@ -892,9 +892,11 @@ function emptyState(title, text, buttonText) {
 
 function simpleTable(headers, rows) {
   if (!rows.length) return el("p", { class: "muted", text: L("Nothing to show.", "Nada para mostrar.") });
+  // A column is numeric when any of its cells is money: its header and all its cells align right.
+  const numeric = headers.map((_, i) => rows.some(r => typeof r[i] === "string" && r[i].includes("€")));
   return el("table", {}, [
-    el("thead", {}, el("tr", {}, headers.map((h, i) => el("th", { text: h, class: i > 0 && h.startsWith("€") ? "num" : null })))),
-    el("tbody", {}, rows.map(r => el("tr", {}, r.map((c, i) => el("td", { class: typeof c === "string" && c.includes("€") ? "num" : null }, c instanceof Node ? [c] : [String(c)]))))),
+    el("thead", {}, el("tr", {}, headers.map((h, i) => el("th", { text: h, class: numeric[i] ? "num" : null })))),
+    el("tbody", {}, rows.map(r => el("tr", {}, r.map((c, i) => el("td", { class: numeric[i] ? "num" : null }, c instanceof Node ? [c] : [String(c)]))))),
   ]);
 }
 
