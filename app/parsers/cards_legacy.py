@@ -22,7 +22,7 @@ from .cards.affinity import parse_affinity
 from .cards.cetelem import parse_cetelem
 from .cards.cofidis import parse_cofidis
 from .cards.universo import parse_universo
-from .cards.wizink import parse_wizink
+from .cards.wizink import parse_wizink, repair_bare_rows
 
 
 class CardParseError(ValueError):
@@ -34,10 +34,17 @@ def _money(value) -> Decimal | None:
 
 
 class LegacyCardParser:
-    def __init__(self, institution: str, parse_fn, printed_balances: bool):
+    def __init__(self, institution: str, parse_fn, printed_balances: bool, repair_fn=None):
         self.institution = institution
         self._parse_fn = parse_fn
         self._printed_balances = printed_balances
+        self._repair_fn = repair_fn
+
+    def repair_text(self, layout_text: str, pdf_path, password: str | None) -> str:
+        """Optional text repair from the PDF itself (see the card's repair_bare_rows)."""
+        if self._repair_fn is None:
+            return layout_text
+        return self._repair_fn(layout_text, pdf_path, password)
 
     def _run(self, text: str) -> dict | None:
         try:
@@ -110,7 +117,7 @@ class LegacyCardParser:
 
 CARD_PARSERS = [
     LegacyCardParser("affinity", parse_affinity, printed_balances=False),
-    LegacyCardParser("wizink", parse_wizink, printed_balances=False),
+    LegacyCardParser("wizink", parse_wizink, printed_balances=False, repair_fn=repair_bare_rows),
     LegacyCardParser("cofidis", parse_cofidis, printed_balances=False),
     LegacyCardParser("universo", parse_universo, printed_balances=True),
     LegacyCardParser("cetelem", parse_cetelem, printed_balances=False),

@@ -134,6 +134,9 @@ def parse_universo(text, filename):
     current_row = None
     anomalies = []
     saw_any_block = False
+    # The last line with no amounts seen outside a row. On some statements the first
+    # line of a wrapped description is printed just above its row's date line.
+    pending_text = None
 
     def flush_row():
         nonlocal current_row
@@ -201,12 +204,21 @@ def parse_universo(text, filename):
             nums = AMT_TOK_RE.findall(rest)
             if not nums:
                 current_row = {'date': d1, 'description': rest.strip()}
+                pending_text = None
                 continue
             desc = AMT_TOK_RE.sub('', rest).strip()
             desc = re.sub(r'\s*€\s*', ' ', desc).strip()
             desc = re.sub(r'\s{2,}', ' ', desc)
-            current_row = {'date': d1, 'description': desc, 'nums': nums}
+            prefixed = False
+            if not desc and pending_text:
+                desc = pending_text
+                prefixed = True
+            pending_text = None
+            current_row = {'date': d1, 'description': desc, 'nums': nums, 'prefixed': prefixed}
             continue
+
+        if not AMT_TOK_RE.search(stripped) and not NOISE_CONTINUATION_RE.search(stripped):
+            pending_text = stripped
 
         if current_row is not None:
             # A row is "complete" once its amounts include the trailing
@@ -222,6 +234,11 @@ def parse_universo(text, filename):
                     current_row['description'] += ' ' + extra_desc
             elif nums_here and 'nums' in current_row:
                 current_row['nums'].extend(nums_here)
+            elif (row_complete and current_row.get('prefixed') and len(stripped.split()) <= 3
+                    and not re.search(r'\d', stripped)):
+                # The last words of a description printed after its amounts, e.g. "DO MÊS".
+                current_row['description'] = (current_row['description'] + ' ' + stripped).strip()
+                current_row['prefixed'] = False
             elif not row_complete and not NOISE_CONTINUATION_RE.search(stripped):
                 current_row['description'] = (current_row['description'] + ' ' + stripped).strip()
             continue

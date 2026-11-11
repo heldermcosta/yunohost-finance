@@ -3,7 +3,7 @@ packaging_format = 2
 id = "finance"
 name = "Finance"
 description.en = "Self-hosted personal finance: statement import, reconciliation and analytics"
-version = "0.3.26~ynh1"
+version = "0.3.27~ynh1"
 maintainers = ["heldermcosta"]
 
 [upstream]
@@ -57,4 +57,4 @@ ram.runtime = "200M"
     type = "postgresql"
 
     [resources.apt]
-    packages = "poppler-utils, python3-venv, python3-dev"
+    packages = "poppler-utils, tesseract-ocr, tesseract-ocr-por, python3-venv, python3-dev"
