@@ -36,3 +36,27 @@ def test_bank_payment_to_a_card_company_is_not_spending():
     assert is_card_payment("PAG SERV WIZINK", D("-120.00"), "activobank")
     assert not is_card_payment("PAG SERV WIZINK", D("120.00"), "activobank")  # a refund is not a payment
     assert not is_card_payment("CONTINENTE", D("-20.00"), "activobank")
+
+
+def test_affinity_statement_with_only_a_payment_is_accepted():
+    # A month whose only movement is the payment of the previous balance: no charges,
+    # so the parser must still recognise the statement and take its period from the heading.
+    from app.parsers import find_parser
+    from app.parsers.base import reconcile
+
+    text = "\n".join([
+        "Extrato nº 77",
+        "Saldo em dívida à data do extrato anterior          45,29 €",
+        "MASTERCARD - Detalhe dos movimentos de 14-03-2025 a 13-04-2025",
+        "  Data Valor   Cartão   Descritivo   Moeda   Valor",
+        "04-04-2025  TIT  Pagamento por DD  -45,29 €",
+        "Total                                              0,00 €",
+        "Todas as compras efetuadas com o cartão nas lojas da rede INDITEX em Portugal têm uma bonificação de 2%.",
+    ])
+    parser = find_parser(text)
+    assert parser.institution == "affinity"
+    st = parser.parse(text)
+    assert st.transactions == []
+    assert st.period_start.isoformat() == "2025-03-14"
+    assert st.period_end.isoformat() == "2025-04-13"
+    assert reconcile(st).status == "ok"

@@ -45,13 +45,22 @@ class LegacyCardParser:
         except Exception:  # a text this parser does not understand is not its statement
             return None
 
+    @staticmethod
+    def _is_statement(result: dict | None) -> bool:
+        # A statement either has charges, or its table is printed with balances and
+        # no charges (for example, a month where the only movement was a payment).
+        if not result:
+            return False
+        if result.get("transactions"):
+            return True
+        return result.get("saldo_inicial") is not None and result.get("saldo_final") is not None
+
     def can_parse(self, text: str) -> bool:
-        result = self._run(text)
-        return bool(result and result.get("transactions"))
+        return self._is_statement(self._run(text))
 
     def parse(self, text: str) -> ParsedStatement:
         result = self._run(text)
-        if not result or not result.get("transactions"):
+        if not self._is_statement(result):
             raise CardParseError(f"{self.institution}: no transaction table found")
 
         opening = _money(result.get("saldo_inicial"))
@@ -76,8 +85,13 @@ class LegacyCardParser:
             ))
 
         dates = [t.booked_on for t in transactions]
-        start = date.fromisoformat(result["period_start"]) if result.get("period_start") else min(dates)
-        end = date.fromisoformat(result["period_end"]) if result.get("period_end") else max(dates)
+        if result.get("period_start") and result.get("period_end"):
+            start = date.fromisoformat(result["period_start"])
+            end = date.fromisoformat(result["period_end"])
+        elif dates:
+            start, end = min(dates), max(dates)
+        else:
+            raise CardParseError(f"{self.institution}: statement has no period")
 
         return ParsedStatement(
             institution=self.institution,

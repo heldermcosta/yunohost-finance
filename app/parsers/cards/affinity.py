@@ -67,6 +67,7 @@ BARE_AMOUNT_RE = re.compile(r'^(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*€\s*$')
 TX_RE = re.compile(r'^(\d{2}-\d{2}-\d{4})\s+(\S+)\s+(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*€\s*$')
 NODATE_RE = re.compile(r'^(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*€\s*$')
 PAYMENT_RE = re.compile(r'^pagamento por\b', re.IGNORECASE)
+PERIOD_RE = re.compile(r'Detalhe dos movimentos de (\d{2}-\d{2}-\d{4}) a (\d{2}-\d{2}-\d{4})')
 
 
 def clean_amount_pt(s):
@@ -197,6 +198,11 @@ def parse_affinity(text, filename):
     dated = sorted(t['lanc_date'] for t in transactions)
     period_start = dated[0] if dated else None
     period_end = dated[-1] if dated else None
+    if not dated:
+        # A statement with only a payment has no dated charge: take the period from its heading.
+        period = PERIOD_RE.search(text)
+        if period:
+            period_start, period_end = to_iso(period.group(1)), to_iso(period.group(2))
 
     return {
         'period_start': period_start,
