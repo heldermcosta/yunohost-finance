@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+from fastapi.responses import JSONResponse
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ from .auth import username_from_authorization
 from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category, parent_of
 from .config import Settings
 from .db import setup_schema
-from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, WrongAccount,
+from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, SamePeriodStatement, WrongAccount,
                      WrongInstitution, import_pdf, read_pdf)
 from .models import (Account, AccountShare, Budget, Category, PdfPassword, PortfolioSnapshot, Rule, Statement,
                      Transaction, User)
@@ -376,16 +377,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 pdf_dir=settings.pdf_dir,
                 work_dir=settings.work_dir,
             )
-        except DuplicateStatement as exc:
-            # Name the earlier copy only when this user can see its account.
-            existing = session.get(Statement, exc.statement_id)
-            details = ""
-            if existing is not None and existing.account_id in visible_ids(session, user):
-                label = account_labels(session, user).get(existing.account_id, "")
-                details = (f" It is {existing.original_name} ({label}, "
-                           f"{existing.period_start.isoformat()} to {existing.period_end.isoformat()}).")
-            raise _err(409, "duplicate", "This statement was already imported." + details,
-                       statement_id=exc.statement_id)
+        except (DuplicateStatement, SamePeriodStatement) as exc:
+            # The file is already stored (or is another copy of a stored statement): read it
+            # again and bring in whatever is new, instead of refusing it.
+            return JSONResponse(refresh_statement(session, user, exc.statement_id, data, candidates),
+                                status_code=200)
         except WrongInstitution as exc:
             raise _err(422, "wrong_institution", str(exc))
         except WrongAccount as exc:
@@ -413,6 +409,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if reply["status"] == "accepted":
             detect_transfers(session, visible_ids(session, user))
         return reply
+
+    def refresh_statement(session: Session, user: User, statement_id: int, data: bytes, candidates: list[str]) -> dict:
+        statement = session.get(Statement, statement_id)
+        account = account_for_read(session, user, statement.account_id)
+        if not access.is_owner(user, account):
+            raise _err(409, "duplicate", "This statement was already imported.", statement_id=statement_id)
+        try:
+            summary = reimport_from_pdf(session, statement, data, candidates, user_rules(session, user),
+                                        settings.work_dir, apply=True)
+        except ReimportRefused as exc:
+            raise _err(409, "duplicate", f"This statement was already imported, and the file cannot be "
+                       f"read as the same statement: {exc}", statement_id=statement_id)
+        counts = summary["counts"]
+        changed = counts["fill_descriptions"] + counts["move_dates"] + counts["to_add"]
+        return {
+            "status": "updated" if changed else "unchanged",
+            "reimported": True,
+            "statement_id": statement_id,
+            "counts": counts,
+            "to_check": counts["differs"] + counts["to_review"],
+        }
 
     @app.get("/api/review")
     def review_queue(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
