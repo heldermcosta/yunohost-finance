@@ -227,7 +227,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "booked_on": t.booked_on.isoformat(), "description": t.description,
                 "amount": str(t.amount), "balance": str(t.balance), "category": t.category,
                 "category_source": t.category_source, "is_transfer": t.is_transfer,
-                "transfer_id": t.transfer_id, "object_name": t.object_name}
+                "transfer_id": t.transfer_id, "object_name": t.object_name, "statement_id": t.statement_id}
 
     def account_labels(session: Session, user: User) -> dict[int, str]:
         return {a.id: a.label for a in access.visible_accounts(session, user)}
@@ -657,6 +657,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             g["total"] += t.amount
             g["ids"].append(t.id)
             g["items"].append({"id": t.id, "booked_on": t.booked_on.isoformat(), "account": labels.get(t.account_id, ""),
+                               "statement_id": t.statement_id,
                                "description": t.description, "amount": str(t.amount)})
             if len(g["examples"]) < 3 and t.description not in g["examples"]:
                 g["examples"].append(t.description)
