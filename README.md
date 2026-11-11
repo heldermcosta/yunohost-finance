@@ -7,13 +7,21 @@ once they are imported.
 
 ## Status
 
-- Parser framework and ActivoBank parser (tested on synthetic statements; validated on the
-  real statement folder, see docs/parser-validation.md).
-- App skeleton: database models, encrypted PDF storage, import pipeline with a review queue,
-  access rules, monthly summary, CSV export.
-- YunoHost package drafted in `package/` (manifest, install, upgrade, remove, backup,
-  restore, systemd and nginx templates). Not yet tested on a YunoHost server.
-- Not yet done: web front end, the other institutions' parsers, the full category rule set.
+- Parser for ActivoBank statements (tested on synthetic statements; validated on the real
+  statement folder, see docs/parser-validation.md). Other banks and cards are not built yet.
+- Import: several PDFs at once, each reconciled. The account is chosen from the bank and the
+  last four digits of the account number printed on the statement. Protected PDFs use saved
+  passwords, or ask for one. Duplicates are refused.
+- Categories: built-in keywords, then your own rules (text contains → category), then manual
+  choices. Changing one transaction can apply to similar ones and save a rule.
+- Transfers between your accounts (and card payments) are found and kept out of spending.
+- Budgets per category per month, with alerts at 80% and 100%.
+- Views: overview by month and category, transactions with filters, review queue, accounts
+  and sharing, household accounts.
+- Exports: CSV, Excel, PDF report by year, full JSON backup.
+- Interface in English and Portuguese.
+- Not yet done: parsers for the other institutions, the full category rule set from the
+  previous importer, and restore verified on a server.
 
 ## YunoHost package
 

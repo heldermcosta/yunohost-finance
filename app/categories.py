@@ -23,9 +23,22 @@ RULES: list[tuple[str, list[str]]] = [
 ]
 
 
-def categorize(description: str, amount: Decimal | None = None) -> str:
+DEFAULT_CATEGORIES = [
+    "Groceries", "Housing & Utilities", "Mortgage", "Insurance", "Consumer Credit / Credit Cards",
+    "Salary / Income", "Card Rewards / Cashback", "Transfers - Personal",
+    "Dining Out", "Transport", "Health", "Shopping", "Entertainment", "Subscriptions",
+    "Taxes", "Bank Fees", "Cash", UNCATEGORISED,
+]
+
+
+def categorize(description: str, amount: Decimal | None = None,
+               user_rules: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+    """Returns (category, source). Source is "rule" for a saved rule, "default" for built-in keywords."""
     text = (description or "").upper()
+    for contains, category in user_rules or []:
+        if contains.upper() in text:
+            return category, "rule"
     for category, keywords in RULES:
         if any(k in text for k in keywords):
-            return category
-    return UNCATEGORISED
+            return category, "default"
+    return UNCATEGORISED, "default"

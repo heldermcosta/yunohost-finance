@@ -273,7 +273,7 @@ def test_csv_export_contains_only_accepted_rows(client, text_by_pdf):
     r = client.get("/api/export/transactions.csv", headers=as_user("helder"))
     assert r.status_code == 200
     lines = r.text.strip().split("\n")
-    assert lines[0].startswith("booked_on,account_id,description")
+    assert lines[0].startswith("booked_on,account,description")
     assert len(lines) == 1 + 3  # header + the three transactions of the accepted statement
 
 
@@ -282,3 +282,101 @@ def test_web_page_is_served(client):
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "api/" in r.text
+
+
+# --- account matching, rules, budgets, exports -----------------------------
+
+def _account(client, user, last4, label):
+    r = client.post("/api/accounts", headers=as_user(user),
+                    json={"institution": "ActivoBank", "label": label, "account_ref_last4": last4})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_statement_goes_to_the_account_with_matching_number(client, text_by_pdf):
+    other = _account(client, "helder", "9999", "Other ActivoBank")
+    matching = _account(client, "helder", "3456", "Main ActivoBank")  # statement is account 123456
+    pdf = b"%PDF-1.4 auto-match"
+    text_by_pdf[pdf] = basic_statement()
+    r = client.post("/api/statements", headers=as_user("helder"),
+                    files={"file": ("EXTRATO.pdf", pdf, "application/pdf")})
+    assert r.status_code == 201, r.text
+    rows = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
+    assert rows and all(t["account_id"] == matching for t in rows)
+    assert other not in {t["account_id"] for t in rows}
+
+
+def test_statement_for_an_unknown_number_asks_for_an_account(client, text_by_pdf):
+    _account(client, "helder", "9999", "Only other")
+    pdf = b"%PDF-1.4 unknown-number"
+    text_by_pdf[pdf] = basic_statement()
+    r = client.post("/api/statements", headers=as_user("helder"),
+                    files={"file": ("EXTRATO.pdf", pdf, "application/pdf")})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "account_needed"
+
+
+def test_explicit_account_with_a_different_number_is_refused(client, text_by_pdf):
+    wrong = _account(client, "helder", "9999", "Wrong one")
+    pdf = b"%PDF-1.4 wrong-number"
+    text_by_pdf[pdf] = basic_statement()
+    r = upload(client, "helder", wrong, pdf)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "wrong_account"
+
+
+def test_rule_recategorises_matching_transactions_but_not_manual_ones(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 rules"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    rows = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
+    target = rows[0]
+    client.patch(f"/api/transactions/{target['id']}", headers=as_user("helder"), json={"category": "Manual pick"})
+
+    r = client.post("/api/rules", headers=as_user("helder"),
+                    json={"contains": "PAG SERV", "category": "Services", "apply": True})
+    assert r.status_code == 201, r.text
+    assert r.json()["updated"] >= 1
+    after = {t["id"]: t for t in client.get("/api/transactions", headers=as_user("helder")).json()["items"]}
+    assert after[target["id"]]["category"] == "Manual pick"  # manual choices are kept
+    assert any(t["category"] == "Services" and t["category_source"] == "rule" for t in after.values())
+
+
+def test_budget_shows_spend_and_status(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 budget"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    assert client.put("/api/budgets", headers=as_user("helder"),
+                      json={"category": "Groceries", "monthly_limit": "100.00"}).status_code == 200
+    budgets = client.get("/api/budgets?month=2026-05", headers=as_user("helder")).json()
+    groceries = next(b for b in budgets if b["category"] == "Groceries")
+    assert groceries["spent"] == "123.45"
+    assert groceries["status"] == "over"
+
+
+def test_exports_have_the_right_formats(client, text_by_pdf):
+    import json as jsonlib
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 exports"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    xlsx = client.get("/api/export/transactions.xlsx", headers=as_user("helder"))
+    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+    pdf_out = client.get("/api/export/report.pdf?year=2026", headers=as_user("helder"))
+    assert pdf_out.status_code == 200 and pdf_out.content.startswith(b"%PDF")
+    backup = jsonlib.loads(client.get("/api/export/backup.json", headers=as_user("helder")).content)
+    assert backup["format"] == "yunohost-finance-backup"
+    assert len(backup["transactions"]) == 3
+    assert "password" not in str(backup).lower()
+
+
+def test_account_with_statements_cannot_be_deleted(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 no-delete"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    assert client.delete(f"/api/accounts/{account_id}", headers=as_user("helder")).status_code == 409
+    empty = _account(client, "helder", "", "Empty")
+    assert client.delete(f"/api/accounts/{empty}", headers=as_user("helder")).status_code == 200

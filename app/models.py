@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, LargeBinary, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, LargeBinary, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -30,6 +30,8 @@ class Account(Base):
     label: Mapped[str] = mapped_column(String(120))
     account_ref_last4: Mapped[str] = mapped_column(String(4), default="")
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    # Household accounts are visible to every user whose view scope is "all".
+    household: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AccountShare(Base):
@@ -87,6 +89,38 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # signed: credit > 0, debit < 0
     balance: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     category: Mapped[str] = mapped_column(String(60), default="Uncategorised")
+    # "default": set by built-in keywords. "rule": set by a saved rule. "manual": set by a person.
+    category_source: Mapped[str] = mapped_column(String(10), default="default")
+    is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
+    transfer_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+
+
+class Rule(Base):
+    """If a description contains `contains` (any case), set the category. Per owner."""
+
+    __tablename__ = "rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    contains: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(60))
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    __table_args__ = (UniqueConstraint("owner_id", "category"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    category: Mapped[str] = mapped_column(String(60))
+    monthly_limit: Mapped[Decimal] = mapped_column(Numeric(14, 2))
 
 
 Index("ix_transactions_account_booked", Transaction.account_id, Transaction.booked_on)
