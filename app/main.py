@@ -52,6 +52,10 @@ class AccountPatch(BaseModel):
     household: bool | None = None
 
 
+class IgnoredTermsIn(BaseModel):
+    terms: list[str] = Field(default_factory=list, max_length=50)
+
+
 class ShareIn(BaseModel):
     username: str = Field(min_length=1, max_length=100)
 
@@ -111,8 +115,22 @@ def _shift_month(month: str, offset: int) -> str:
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
-def _description_key(description: str) -> str:
-    words = [w for w in re.sub(r"[\d/\\.*#-]+", " ", description.upper()).split() if len(w) > 2]
+def _ignored_terms(user: User) -> tuple[str, ...]:
+    """The user's terms to ignore, normalised: upper case, single spaces, no duplicates."""
+    lines = (user.ignored_terms or "").splitlines()
+    return tuple(dict.fromkeys(" ".join(line.upper().split()) for line in lines if line.strip()))
+
+
+def _description_key(description: str, ignored: tuple[str, ...] = ()) -> str:
+    """Merchant key: the first two meaningful words once ignored terms are removed.
+
+    Bank prefixes such as "PAG SERV" are removed first, so the merchant that follows
+    is what gets compared.
+    """
+    text = " ".join(description.upper().split())
+    for term in sorted(ignored, key=len, reverse=True):
+        text = re.sub(r"(?<![A-Z0-9])" + re.escape(term) + r"(?![A-Z0-9])", " ", text)
+    words = [w for w in re.sub(r"[\d/\\.*#-]+", " ", text).split() if len(w) > 2]
     return " ".join(words[:2])
 
 
@@ -225,7 +243,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/me")
     def me(user: User = Depends(get_current_user)) -> dict:
-        return {"username": user.username, "view_scope": user.view_scope}
+        return {"username": user.username, "view_scope": user.view_scope,
+                "ignored_terms": list(_ignored_terms(user))}
+
+    @app.put("/api/me/ignored-terms")
+    def set_ignored_terms(body: IgnoredTermsIn, user: User = Depends(get_current_user),
+                          session: Session = Depends(get_session)) -> dict:
+        terms = list(dict.fromkeys(" ".join(t.upper().split()) for t in body.terms if t.strip()))
+        if any(len(t) > 40 for t in terms):
+            raise HTTPException(status_code=422, detail="each term must be 40 characters or fewer")
+        user = session.merge(user)
+        user.ignored_terms = "\n".join(terms)
+        session.commit()
+        return {"ignored_terms": terms}
 
     @app.put("/api/me/scope")
     def set_scope(body: ScopeIn, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
@@ -494,7 +524,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if t is None:
             raise HTTPException(status_code=404, detail="transaction not found")
         account_for_read(session, user, t.account_id)
-        key_text = _description_key(t.description)
+        key_text = _description_key(t.description, _ignored_terms(user))
         if not key_text:
             return []
         rows = (accepted_query(session, user)
@@ -571,7 +601,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 .order_by(Transaction.booked_on.desc(), Transaction.id.desc()).all())
         groups: dict[str, dict] = {}
         for t in rows:
-            key = _description_key(t.description) or t.description.strip().upper()[:30]
+            key = _description_key(t.description, _ignored_terms(user)) or t.description.strip().upper()[:30]
             g = groups.setdefault(key, {"key": key, "count": 0, "total": Decimal("0"),
                                         "ids": [], "items": [], "examples": []})
             g["count"] += 1
@@ -665,7 +695,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expense_rows = [t for t in cur_items if t.amount < 0]
         merchants: dict[str, dict] = {}
         for t in expense_rows:
-            key = _description_key(t.description) or t.description.upper()[:20]
+            key = _description_key(t.description, _ignored_terms(user)) or t.description.upper()[:20]
             entry = merchants.setdefault(key, {"name": key, "total": Decimal("0"), "count": 0})
             entry["total"] += -t.amount
             entry["count"] += 1
@@ -679,7 +709,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for m in sorted(window):
             for t in by_month.get(m, []):
                 if t.amount < 0:
-                    key = _description_key(t.description)
+                    key = _description_key(t.description, _ignored_terms(user))
                     if not key:
                         continue
                     entry = recent.setdefault(key, {"name": key, "months": set(), "amounts": []})

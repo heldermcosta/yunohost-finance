@@ -563,3 +563,26 @@ def test_uncategorised_groups_are_sorted_by_frequency(client, text_by_pdf):
     ids = [i for g in data["groups"] for i in g["ids"]]
     assert sorted(ids) == sorted(t["id"] for t in listed if not t["is_transfer"])
     assert all(g["examples"] for g in data["groups"])
+
+
+def test_ignored_terms_are_removed_before_the_merchant_is_compared():
+    from app.main import _description_key
+
+    assert _description_key("PAG SERV DEGIRO INVESTING") == "PAG SERV"
+    assert _description_key("PAG SERV DEGIRO INVESTING", ("PAG SERV",)) == "DEGIRO INVESTING"
+    # Whole words only: "PAG" inside another word is not removed.
+    assert _description_key("PAGAMENTO LIDL", ("PAG",)) == "PAGAMENTO LIDL"
+    # Double spaces in the bank text do not stop a term from matching.
+    assert _description_key("PAG  SERV  DEGIRO", ("PAG SERV",)) == "DEGIRO"
+
+
+def test_ignored_terms_are_saved_per_user_and_used_in_the_groups(client, text_by_pdf):
+    r = client.put("/api/me/ignored-terms", headers=as_user("helder"),
+                   json={"terms": [" pag serv ", "PAG SERV", ""]})
+    assert r.status_code == 200
+    assert r.json()["ignored_terms"] == ["PAG SERV"]
+    assert client.get("/api/me", headers=as_user("helder")).json()["ignored_terms"] == ["PAG SERV"]
+    assert client.get("/api/me", headers=as_user("elsa")).json()["ignored_terms"] == []
+
+    too_long = client.put("/api/me/ignored-terms", headers=as_user("helder"), json={"terms": ["X" * 41]})
+    assert too_long.status_code == 422

@@ -19,6 +19,8 @@ class User(Base):
     # "own_shared": accounts I own or that were shared with me.
     # "all": every account I can access. See README: this matches "own_shared" today.
     view_scope: Mapped[str] = mapped_column(String(20), default="own_shared")
+    # One term per line. Removed from descriptions before merchants are compared.
+    ignored_terms: Mapped[str] = mapped_column(Text, default="")
 
 
 class Account(Base):

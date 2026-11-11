@@ -312,6 +312,12 @@ details.cat ul { margin: 4px 0 8px 18px; padding: 0; }
     <p class="muted"><span data-i18n="signed_in_as">Signed in as</span> <span id="st-user"></span></p>
   </div>
   <div class="card">
+    <h2 data-i18n="ignored_title">Words to ignore when grouping</h2>
+    <p class="muted" data-i18n="ignored_note">Bank prefixes such as "PAG SERV" are removed before descriptions are compared, so the merchant after them is used. One term per line.</p>
+    <textarea id="ig-terms" rows="5" style="width:100%"></textarea>
+    <div style="margin-top:12px"><button class="primary" id="ig-save" data-i18n="save">Save</button></div>
+  </div>
+  <div class="card">
     <h2 data-i18n="pdf_passwords">Saved PDF passwords</h2>
     <p class="muted" data-i18n="pdf_pw_note">Tried automatically on protected statements. Stored encrypted and never shown again.</p>
     <div class="table-wrap" id="pw-table"></div>
@@ -374,7 +380,7 @@ en: {
   budget_none:"No budgets yet. Add one below.", budget_spent:"{spent} of {limit}", budget_over:"over", budget_near:"near",
   delete_category_confirm:"Delete category \"{name}\"? Its transactions become Uncategorised and its rules and budgets are removed.",
   delete_account_confirm:"Delete this account? Only possible when it has no statements.", delete_rule_confirm:"Delete this rule?",
-  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", tab_categorise:"Categorise", cg_title:"Categorise uncategorised transactions", cg_note:"Grouped by merchant, most frequent first. Choose a category for a group to set it on all its transactions.", cg_count:"{n} uncategorised transactions in {g} groups", cg_none:"Nothing left to categorise.", cg_choose:"Choose category", cg_save_rule:"Save as rule", cg_apply:"Apply", cg_skip:"Skip", cg_confirm:"Set \"{c}\" on {n} transactions?", cg_col_count:"Count", cg_col_merchant:"Merchant", cg_col_total:"Total", cg_col_category:"Category", cg_in_group:"In group", cg_date:"Date", cg_description:"Description", cg_amount:"Amount", cg_none_selected:"Select at least one transaction in the group.", st_filter_account:"All accounts", st_filter_status:"All statuses", st_filter_search:"Search file name", st_select_all:"Select all shown", st_delete_selected:"Delete selected ({n})", st_bulk_confirm:"Delete {n} statement(s), their PDFs and all their transactions?", st_bulk_done:"Deleted {n}. Skipped {s} you do not own.", st_none_match:"No statements match these filters.", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
+  delete_statement_confirm:"Delete this statement, its PDF and all its transactions?", ignored_title:"Words to ignore when grouping", ignored_note:"Bank prefixes such as \"PAG SERV\" are removed before descriptions are compared, so the merchant after them is used. One term per line.", ig_saved:"Ignored words saved.", tab_categorise:"Categorise", cg_title:"Categorise uncategorised transactions", cg_note:"Grouped by merchant, most frequent first. Choose a category for a group to set it on all its transactions.", cg_count:"{n} uncategorised transactions in {g} groups", cg_none:"Nothing left to categorise.", cg_choose:"Choose category", cg_save_rule:"Save as rule", cg_apply:"Apply", cg_skip:"Skip", cg_confirm:"Set \"{c}\" on {n} transactions?", cg_col_count:"Count", cg_col_merchant:"Merchant", cg_col_total:"Total", cg_col_category:"Category", cg_in_group:"In group", cg_date:"Date", cg_description:"Description", cg_amount:"Amount", cg_none_selected:"Select at least one transaction in the group.", st_filter_account:"All accounts", st_filter_status:"All statuses", st_filter_search:"Search file name", st_select_all:"Select all shown", st_delete_selected:"Delete selected ({n})", st_bulk_confirm:"Delete {n} statement(s), their PDFs and all their transactions?", st_bulk_done:"Deleted {n}. Skipped {s} you do not own.", st_none_match:"No statements match these filters.", delete_password_confirm:"Delete this saved password?", rename_prompt:"New name",
   scope_saved:"Saved", detect_done:"{n} transfer pairs found", not_signed_in:"Not signed in",
   err_too_large:"The file is larger than 20 MB.", err_not_pdf:"This is not a PDF file.", err_no_parser:"No parser recognises this statement yet.",
   err_wrong_institution:"This statement is from another bank than the account.", err_wrong_account:"This statement belongs to another account.",
@@ -415,7 +421,7 @@ pt: {
   budget_none:"Ainda não há orçamentos. Adicione um abaixo.", budget_spent:"{spent} de {limit}", budget_over:"excedido", budget_near:"perto",
   delete_category_confirm:"Apagar a categoria \"{name}\"? Os movimentos ficam sem categoria e as regras e orçamentos são removidos.",
   delete_account_confirm:"Apagar esta conta? Só é possível sem extratos.", delete_rule_confirm:"Apagar esta regra?",
-  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", tab_categorise:"Categorizar", cg_title:"Categorizar movimentos sem categoria", cg_note:"Agrupados por comerciante, do mais frequente para o menos. Escolha uma categoria para um grupo e ela aplica-se a todos os seus movimentos.", cg_count:"{n} movimentos sem categoria em {g} grupos", cg_none:"Não há mais movimentos para categorizar.", cg_choose:"Escolher categoria", cg_save_rule:"Guardar como regra", cg_apply:"Aplicar", cg_skip:"Saltar", cg_confirm:"Definir \"{c}\" em {n} movimentos?", cg_col_count:"Nº", cg_col_merchant:"Comerciante", cg_col_total:"Total", cg_col_category:"Categoria", cg_in_group:"No grupo", cg_date:"Data", cg_description:"Descrição", cg_amount:"Valor", cg_none_selected:"Selecione pelo menos um movimento do grupo.", st_filter_account:"Todas as contas", st_filter_status:"Todos os estados", st_filter_search:"Pesquisar nome do ficheiro", st_select_all:"Selecionar os visíveis", st_delete_selected:"Apagar selecionados ({n})", st_bulk_confirm:"Apagar {n} extrato(s), os seus PDFs e todos os movimentos?", st_bulk_done:"Apagados {n}. Ignorados {s} que não são seus.", st_none_match:"Nenhum extrato corresponde a estes filtros.", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
+  delete_statement_confirm:"Apagar este extrato, o seu PDF e todos os movimentos?", ignored_title:"Palavras a ignorar ao agrupar", ignored_note:"Prefixos do banco, como \"PAG SERV\", são retirados antes de comparar descrições, por isso usa-se o comerciante que vem depois. Um termo por linha.", ig_saved:"Palavras ignoradas guardadas.", tab_categorise:"Categorizar", cg_title:"Categorizar movimentos sem categoria", cg_note:"Agrupados por comerciante, do mais frequente para o menos. Escolha uma categoria para um grupo e ela aplica-se a todos os seus movimentos.", cg_count:"{n} movimentos sem categoria em {g} grupos", cg_none:"Não há mais movimentos para categorizar.", cg_choose:"Escolher categoria", cg_save_rule:"Guardar como regra", cg_apply:"Aplicar", cg_skip:"Saltar", cg_confirm:"Definir \"{c}\" em {n} movimentos?", cg_col_count:"Nº", cg_col_merchant:"Comerciante", cg_col_total:"Total", cg_col_category:"Categoria", cg_in_group:"No grupo", cg_date:"Data", cg_description:"Descrição", cg_amount:"Valor", cg_none_selected:"Selecione pelo menos um movimento do grupo.", st_filter_account:"Todas as contas", st_filter_status:"Todos os estados", st_filter_search:"Pesquisar nome do ficheiro", st_select_all:"Selecionar os visíveis", st_delete_selected:"Apagar selecionados ({n})", st_bulk_confirm:"Apagar {n} extrato(s), os seus PDFs e todos os movimentos?", st_bulk_done:"Apagados {n}. Ignorados {s} que não são seus.", st_none_match:"Nenhum extrato corresponde a estes filtros.", delete_password_confirm:"Apagar esta palavra-passe guardada?", rename_prompt:"Novo nome",
   scope_saved:"Guardado", detect_done:"{n} pares de transferências encontrados", not_signed_in:"Sessão não iniciada",
   err_too_large:"O ficheiro tem mais de 20 MB.", err_not_pdf:"Não é um ficheiro PDF.", err_no_parser:"Ainda não há leitor para este extrato.",
   err_wrong_institution:"Este extrato é de outro banco que não o da conta.", err_wrong_account:"Este extrato pertence a outra conta.",
@@ -1369,7 +1375,15 @@ LOADERS.settings = async () => {
   cache.me = await api("me");
   $("st-user").textContent = cache.me.username;
   $("st-scope").value = cache.me.view_scope;
+  $("ig-terms").value = (cache.me.ignored_terms || []).join("\n");
 };
+$("ig-save").addEventListener("click", async () => {
+  try {
+    const r = await api("me/ignored-terms", { method: "PUT", json: { terms: $("ig-terms").value.split("\n") } });
+    $("ig-terms").value = r.ignored_terms.join("\n");
+    toast("success", t("ig_saved"));
+  } catch (e) { toast("error", errorText(e)); }
+});
 $("st-lang").addEventListener("change", (e) => setLanguage(e.target.value));
 $("st-save").addEventListener("click", async () => {
   try {
