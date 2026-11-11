@@ -26,6 +26,11 @@ def transactions_csv(rows: list[dict]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
+def spent(value: Decimal) -> Decimal:
+    """Spending is shown negative, as money leaving: the sign rule used everywhere in the app."""
+    return -value if value else Decimal(0)
+
+
 def monthly_expenses(rows: list[dict]) -> tuple[list[str], list[str], dict]:
     """Returns (months, categories, {(month, category): expenses}) for non-transfer rows."""
     totals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
@@ -68,7 +73,7 @@ def transactions_xlsx(rows: list[dict]) -> bytes:
     for cell in summary[1]:
         cell.font = Font(bold=True)
     for category in categories:
-        values = [float(totals.get((m, category), 0)) for m in months]
+        values = [float(spent(totals.get((m, category), Decimal(0)))) for m in months]
         summary.append([category] + values + [sum(values)])
     summary.column_dimensions["A"].width = 32
     for row in summary.iter_rows(min_row=2):
@@ -98,15 +103,15 @@ def report_pdf(rows: list[dict], year: str, currency: str = "EUR") -> bytes:
 
     styles = getSampleStyleSheet()
     story = [Paragraph(f"Spending report {year} ({currency})", styles["Title"]),
-             Paragraph("Expenses by category and month. Transfers between own accounts are excluded.", styles["Normal"]),
+             Paragraph("Spending by category and month, money leaving shown as negative. Transfers between own accounts are excluded.", styles["Normal"]),
              Spacer(1, 12)]
     header = ["Category"] + [m[5:] + "/" + m[2:4] for m in months] + ["Total"]
     body = [header]
     for category in categories:
         values = [totals.get((m, category), Decimal(0)) for m in months]
-        body.append([category] + [money(v) if v else "-" for v in values] + [money(sum(values))])
+        body.append([category] + [money(spent(v)) if v else "-" for v in values] + [money(spent(sum(values)))])
     month_totals = [sum(totals.get((m, c), Decimal(0)) for c in categories) for m in months]
-    body.append(["Total expenses"] + [money(v) for v in month_totals] + [money(sum(month_totals))])
+    body.append(["Total spending"] + [money(spent(v)) for v in month_totals] + [money(spent(sum(month_totals)))])
     body.append(["Income"] + [money(income.get(m, 0)) for m in months] + [money(sum(income.get(m, 0) for m in months))])
 
     table = Table(body, repeatRows=1)

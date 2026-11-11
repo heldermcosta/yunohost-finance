@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto, exports
+from .version import __version__
 from .auth import username_from_authorization
 from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category, parent_of
 from .config import Settings
@@ -177,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     s.add(Category(name=name))
             s.commit()
 
-    app = FastAPI(title="yunohost-finance", version="0.3.0")
+    app = FastAPI(title="yunohost-finance", version=__version__)
     app.state.settings = settings
 
     def get_session():
@@ -250,6 +251,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def web_app() -> FileResponse:
         # The page itself is public; every API call it makes is still checked by SSO.
         return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+
+    @app.get("/api/version")
+    def version() -> dict:
+        """The running version, shown in the page header. Needs no sign-in."""
+        return {"version": __version__}
 
     @app.get("/api/me")
     def me(user: User = Depends(get_current_user)) -> dict:
