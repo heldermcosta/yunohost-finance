@@ -376,6 +376,7 @@ tr.cg-row td:first-child { width: 28px; }
     <div id="ins-kpis" class="kpis"></div>
     <p class="muted" id="ov-compare"></p>
     <ul id="ins-notes"></ul>
+    <p id="ov-dups" class="muted"></p>
   </div>
 
   <div class="card">
@@ -486,6 +487,11 @@ tr.cg-row td:first-child { width: 28px; }
 
 <!-- REVIEW -->
 <section id="tab-review">
+  <div class="card hidden" id="dup-card">
+    <h2 id="dup-title">Duplicate statements</h2>
+    <p class="muted" id="dup-note"></p>
+    <div class="table-wrap" id="dup-table"></div>
+  </div>
   <div class="card">
     <h2 data-i18n="review_title">Waiting for review</h2>
     <p class="muted" data-i18n="review_note">Accept a statement once you have checked it. Deleting removes the statement and its PDF.</p>
@@ -1041,6 +1047,7 @@ async function renderInsights() {
 LOADERS.overview = async () => {
   applyOverviewText();
   await loadAccounts(); await loadCategories();
+  loadDuplicates().catch(e => toast("error", errorText(e)));
   await renderInsights();
   await loadYears($("ex-year"));
   await loadBudgets();
@@ -1717,7 +1724,41 @@ window.addEventListener("drop", (e) => {
 LOADERS.import = async () => { await loadAccounts(); };
 
 /* ---------- review ---------- */
+// Accepted statements that repeat another statement's movements. Shown on the overview as a
+// warning and, with a delete button for each copy, in the Review tab.
+async function loadDuplicates() {
+  const d = await api("duplicates");
+  $("ov-dups").replaceChildren();
+  $("dup-card").classList.toggle("hidden", d.count === 0);
+  if (!d.count) return;
+  const amounts = L(`${outgoing(d.spending_twice)} of spending`, `${outgoing(d.spending_twice)} de despesa`);
+  const incomes = L(`${money(d.income_twice)} of income`, `${money(d.income_twice)} de receita`);
+  $("ov-dups").replaceChildren(
+    el("span", { text: L(`${d.count} statement(s) repeat another statement's movements. They count ${amounts} and ${incomes} twice.`,
+                         `${d.count} extrato(s) repetem os movimentos de outro extrato. Contam ${amounts} e ${incomes} duas vezes.`) + " " }),
+    el("button", { class: "small", type: "button", text: L("Review", "Rever"), on: { click: () => showTab("review") } }));
+  $("dup-title").textContent = L(`Duplicate statements (${d.count})`, `Extratos duplicados (${d.count})`);
+  $("dup-note").textContent = L("Each pair covers the same account and period. Delete the copy you do not need; its movements are removed with it.",
+                                "Cada par tem a mesma conta e período. Apague a cópia que não precisa; os movimentos dela são removidos com ela.");
+  $("dup-table").replaceChildren(el("table", {}, [
+    el("thead", {}, el("tr", {}, [L("Account", "Conta"), L("Keep", "Manter"), L("Copy", "Cópia"), L("Shared", "Em comum"), L("Spending twice", "Despesa duplicada"), ""].map(h => el("th", { text: h })))),
+    el("tbody", {}, d.pairs.map(p => el("tr", {}, [
+      el("td", { text: p.account }),
+      el("td", { class: "desc", text: `${p.first.file} (${p.first.period.join(" → ")})` }),
+      el("td", { class: "desc", text: `${p.second.file} (${p.second.period.join(" → ")})` }),
+      el("td", { text: String(p.shared) + (p.identical ? " · " + L("identical", "idêntico") : "") }),
+      el("td", { class: "num", text: outgoing(p.spending_twice) }),
+      el("td", {}, p.can_delete ? el("button", { class: "small danger", type: "button", text: t("delete"), on: { click: async () => {
+        if (!(await confirmBox(L(`Delete the copy ${p.second.file}? Its movements are removed.`, `Apagar a cópia ${p.second.file}? Os movimentos são removidos.`)))) return;
+        try { await api(`statements/${p.second.id}`, { method: "DELETE" }); toast("success", t("deleted")); loadDuplicates(); }
+        catch (e) { toast("error", errorText(e)); }
+      } } }) : null),
+    ]))),
+  ]));
+}
+
 LOADERS.review = async () => {
+  loadDuplicates().catch(e => toast("error", errorText(e)));
   const rows = await api("review");
   $("review-count").textContent = rows.length; $("review-count").classList.toggle("hidden", rows.length === 0);
   if (!rows.length) { $("rv-table").replaceChildren(el("p", { class: "muted", text: t("nothing_review") })); return; }
