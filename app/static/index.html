@@ -896,6 +896,18 @@ function simpleTable(headers, rows) {
 }
 
 // Short month name for the monthly bars, e.g. "May" or "mai.".
+// Sums the months of a period by calendar year.
+function yearBuckets(rows) {
+  const years = new Map();
+  for (const m of rows) {
+    const key = m.month.slice(0, 4);
+    const y = years.get(key) || { label: key, title: key, income: 0, expenses: 0, net: 0 };
+    y.income += Number(m.income); y.expenses += Number(m.expenses); y.net += Number(m.net);
+    years.set(key, y);
+  }
+  return [...years.values()].map(y => ({ ...y, income: String(y.income), expenses: String(y.expenses), net: String(y.net) }));
+}
+
 function monthShort(ym) {
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString(lang === "pt" ? "pt-PT" : "en-GB", { month: "short" });
@@ -946,11 +958,13 @@ async function renderInsights() {
       : L("No income in this period", "Sem receitas neste período")),
     kpi(L("Spending per month", "Despesa por mês"), money(expenses / months),
       months > 1 ? L(`Average over ${months} months`, `Média de ${months} meses`) : null),
-    kpi(L("Uncategorised", "Sem categoria"), `${data.uncategorised.count} · ${money(data.uncategorised.total)}`, null),
+    kpi(L("Uncategorised", "Sem categoria"), money(data.uncategorised.total),
+      `${data.uncategorised.count} ${L("expenses", "despesas")}`),
   );
-  $("ov-compare").textContent = L(
+  const hadPrevious = Number(data.previous_income) !== 0 || Number(data.previous_expenses) !== 0;
+  $("ov-compare").textContent = hadPrevious ? L(
     `Compared with ${monthLabel(data.previous_start)} to ${monthLabel(data.previous_month)}.`,
-    `Comparado com ${monthLabel(data.previous_start)} a ${monthLabel(data.previous_month)}.`);
+    `Comparado com ${monthLabel(data.previous_start)} a ${monthLabel(data.previous_month)}.`) : "";
 
   // Sentences that point out what changed.
   const notes = [];
@@ -972,16 +986,22 @@ async function renderInsights() {
                                                `${data.budget_alerts.length} orçamento(s) excedido(s) ou perto do limite.`));
   $("ins-notes").replaceChildren(...notes.map(n => el("li", { text: n })));
 
-  // Bars: spending per month of the period. Table: income, spending and net per month.
-  const maxMonth = Math.max(1, ...data.months.map(m => Number(m.expenses)));
-  $("ov-chart").replaceChildren(...data.months.map(m => el("div", { class: "col", title: `${monthLabel(m.month)}: ${money(m.expenses)}` }, [
-    el("b", { text: Number(m.expenses) ? money(m.expenses) : "" }),
-    el("i", { style: `height:${(Number(m.expenses) / maxMonth * 100).toFixed(1)}%` }),
-    el("span", { text: monthShort(m.month) }),
+  // Up to two years: one bar and row per month. Longer periods: one per year, so the page stays readable.
+  const byYear = data.months.length > 24;
+  const buckets = byYear ? yearBuckets(data.months) : data.months.map(m => ({
+    label: monthShort(m.month), title: monthLabel(m.month),
+    income: m.income, expenses: m.expenses, net: m.net,
+  }));
+  const maxBucket = Math.max(1, ...buckets.map(b => Number(b.expenses)));
+  const showValues = buckets.length <= 8;
+  $("ov-chart").replaceChildren(...buckets.map(b => el("div", { class: "col", title: `${b.title}: ${money(b.expenses)}` }, [
+    showValues ? el("b", { text: Number(b.expenses) ? money(b.expenses) : "" }) : null,
+    el("i", { style: `height:${(Number(b.expenses) / maxBucket * 100).toFixed(1)}%` }),
+    el("span", { text: b.label }),
   ])));
   $("ins-months").replaceChildren(simpleTable(
-    [L("Month", "Mês"), L("Income", "Receitas"), L("Spending", "Despesas"), L("Net", "Saldo")],
-    [...data.months.map(m => [monthLabel(m.month), money(m.income), money(m.expenses), money(m.net)]),
+    [byYear ? L("Year", "Ano") : L("Month", "Mês"), L("Income", "Receitas"), L("Spending", "Despesas"), L("Net", "Saldo")],
+    [...buckets.map(b => [byYear ? b.label : b.title, money(b.income), money(b.expenses), money(b.net)]),
      [L("Total", "Total"), money(income), money(expenses), money(net)]]));
 
   // Categories, each with its subcategories inside (collapsed until opened).
