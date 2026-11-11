@@ -60,3 +60,23 @@ def test_affinity_statement_with_only_a_payment_is_accepted():
     assert st.period_start.isoformat() == "2025-03-14"
     assert st.period_end.isoformat() == "2025-04-13"
     assert reconcile(st).status == "ok"
+
+
+def test_cetelem_2026_rows_with_two_digit_years_are_read():
+    from app.parsers import find_parser
+    from app.parsers.base import reconcile
+
+    text = "\n".join([
+        "Período Extrato Atual:         17/08/2026 a 16/09/2026",
+        "Detalhes de Movimento do Período de Extrato (valores em €)",
+        "17/08/26    17/08/26    VALOR EM DIVIDA FECHO EXTRATO ANTERIOR    -    -    -    -    -    100,00",
+        "20/08/26    20/08/26    AUCHAN SETUBAL II    2,83    -    -    -    -    10,00    110,00",
+        "Valores Antecipados (valores em €)",
+    ])
+    parser = find_parser(text)
+    assert parser.institution == "cetelem"
+    st = parser.parse(text)
+    assert len(st.transactions) == 1
+    assert st.transactions[0].amount == Decimal("-10.00")
+    assert st.transactions[0].booked_on.isoformat() == "2026-08-20"
+    assert reconcile(st).status == "ok"
