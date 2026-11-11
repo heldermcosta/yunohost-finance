@@ -112,6 +112,7 @@ button.danger:hover { background: var(--bad-soft); border-color: var(--bad); }
 button.small { padding: 4px 9px; min-height: 28px; font-size: 13px; }
 button:disabled { opacity: .45; cursor: default; background: var(--card); border-color: var(--line-strong); }
 .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.row.top { align-items: flex-start; }
 .row > * { flex: 1 1 160px; min-width: 0; }
 .row > .wide { flex: 2 1 260px; }
 .row > .auto { flex: 0 0 auto; }
@@ -333,7 +334,7 @@ tr.cg-row td:first-child { width: 28px; }
 </head>
 <body>
 <header>
-  <h1>Finance</h1>
+  <h1>Finance <small id="app-version" class="muted"></small></h1>
   <nav id="tabs">
     <button data-tab="overview" class="active" data-i18n="tab_overview">Overview</button>
     <button data-tab="transactions" data-i18n="tab_transactions">Transactions</button>
@@ -399,7 +400,7 @@ tr.cg-row td:first-child { width: 28px; }
   </div>
 
   <div class="card">
-    <div class="row">
+    <div class="row top">
       <div class="wide"><h2 id="ov-h-budgets">Budgets</h2></div>
       <div class="auto"><label for="bd-month">Month</label><input type="month" id="bd-month"></div>
     </div>
@@ -2091,6 +2092,7 @@ $("st-save").addEventListener("click", async () => {
 
 /* ---------- start ---------- */
 (async () => {
+  api("version").then(v => { $("app-version").textContent = "v" + v.version; }).catch(() => {});
   try { localStorage.getItem("finance-lang"); } catch (e) {}
   applyLanguage();
   const start = (location.hash || "#overview").slice(1);

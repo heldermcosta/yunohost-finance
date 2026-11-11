@@ -576,6 +576,25 @@ def test_insights_for_a_month(client, text_by_pdf):
     assert client.get("/api/insights?month=2026-13", headers=as_user("helder")).status_code == 422
 
 
+def test_version_is_public_and_matches_the_package(client):
+    from app.version import __version__
+    assert client.get("/api/version").json() == {"version": __version__}
+
+
+def test_excel_summary_shows_spending_as_negative(client, text_by_pdf):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 export-sign"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    r = client.get("/api/export/transactions.xlsx", headers=as_user("helder"))
+    assert r.status_code == 200, r.text
+    sheet = load_workbook(BytesIO(r.content))["Monthly expenses"]
+    values = [cell.value for row in sheet.iter_rows(min_row=2) for cell in row[1:]]
+    assert values and all(v <= 0 for v in values if v is not None)
+
+
 def test_insights_has_one_row_per_month_of_the_period(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 insights-months"
