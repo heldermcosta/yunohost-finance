@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 from .activobank import ActivoBankParser
+from .bankinter import BankinterParser
 from .base import StatementParser
 from .cards_legacy import CARD_PARSERS
 
+# Bank layouts first: some bank statements mention card brands (for example a
+# WiZink payment line on a Bankinter statement), and the card parsers must not
+# claim them.
 PARSERS: list[StatementParser] = [
     ActivoBankParser(),
+    BankinterParser(),
     *CARD_PARSERS,
 ]
 
 
 INSTITUTION_NAMES = {
-    "activobank": "ActivoBank", "affinity": "Affinity", "wizink": "WiZink",
-    "cofidis": "Cofidis", "universo": "Universo", "cetelem": "Cetelem",
+    "activobank": "ActivoBank", "bankinter": "Bankinter", "affinity": "Affinity",
+    "wizink": "WiZink", "cofidis": "Cofidis", "universo": "Universo", "cetelem": "Cetelem",
 }
 
 
