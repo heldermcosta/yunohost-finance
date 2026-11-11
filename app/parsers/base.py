@@ -30,10 +30,12 @@ class ParsedStatement:
     currency: str
     period_start: date
     period_end: date
-    opening_balance: Decimal
-    closing_balance: Decimal
+    opening_balance: Decimal | None
+    closing_balance: Decimal | None
     transactions: list[Transaction]
     anomalies: list[str] = field(default_factory=list)
+    # "bank": a credit raises the balance. "card": a purchase raises what is owed.
+    balance_direction: str = "bank"
 
 
 @dataclass
@@ -68,14 +70,25 @@ def reconcile(st: ParsedStatement) -> Reconciliation:
 
     status "ok" means both checks pass.
     """
+    if st.opening_balance is None or st.closing_balance is None:
+        return Reconciliation(
+            status="failed",
+            expected_closing=Decimal("0.00"),
+            difference=Decimal("0.00"),
+            row_warnings=["balances are not printed on this statement"],
+        )
+
+    card = st.balance_direction == "card"
     total = sum((t.amount for t in st.transactions), Decimal("0.00"))
-    expected = st.opening_balance + total
+    # Card: the amount owed goes up with a purchase (a negative amount here).
+    expected = st.opening_balance - total if card else st.opening_balance + total
     diff = st.closing_balance - expected
 
     row_warnings: list[str] = []
     prev = st.opening_balance
     for i, t in enumerate(st.transactions, start=1):
-        if prev + t.amount != t.balance:
+        step = prev - t.amount if card else prev + t.amount
+        if step != t.balance:
             row_warnings.append(
                 f"row {i} ({t.booked_on}): running balance does not follow"
             )

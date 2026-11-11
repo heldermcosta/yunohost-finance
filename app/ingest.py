@@ -17,11 +17,12 @@ import os
 import secrets
 import tempfile
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .categories import categorize
+from .categories import categorize, is_card_payment
 from .models import Account, Statement, Transaction
 from .parsers import find_parser
 from .parsers.base import reconcile
@@ -172,8 +173,8 @@ def import_pdf(
         original_name=original_name[:255],
         period_start=parsed.period_start,
         period_end=parsed.period_end,
-        opening_balance=parsed.opening_balance,
-        closing_balance=parsed.closing_balance,
+        opening_balance=parsed.opening_balance if parsed.opening_balance is not None else Decimal("0.00"),
+        closing_balance=parsed.closing_balance if parsed.closing_balance is not None else Decimal("0.00"),
         status=status,
         reconciliation=result.status,
         notes="\n".join(notes[:200]),
@@ -184,6 +185,9 @@ def import_pdf(
 
     for t in parsed.transactions:
         category, source = categorize(t.description, t.amount, user_rules)
+        card_payment = is_card_payment(t.description, t.amount, parser.institution)
+        if card_payment:
+            category, source = "Card payments", "default"
         session.add(
             Transaction(
                 statement_id=statement.id,
@@ -195,6 +199,7 @@ def import_pdf(
                 balance=t.balance,
                 category=category,
                 category_source=source,
+                is_transfer=card_payment,
             )
         )
     session.commit()

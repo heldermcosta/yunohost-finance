@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from .activobank import ActivoBankParser
 from .base import StatementParser
+from .cards_legacy import CARD_PARSERS
 
 PARSERS: list[StatementParser] = [
     ActivoBankParser(),
+    *CARD_PARSERS,
 ]
 
 

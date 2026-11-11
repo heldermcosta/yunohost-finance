@@ -27,8 +27,17 @@ DEFAULT_CATEGORIES = [
     "Groceries", "Housing & Utilities", "Mortgage", "Insurance", "Consumer Credit / Credit Cards",
     "Salary / Income", "Card Rewards / Cashback", "Transfers - Personal",
     "Dining Out", "Transport", "Health", "Shopping", "Entertainment", "Subscriptions",
-    "Taxes", "Bank Fees", "Cash", UNCATEGORISED,
+    "Taxes", "Bank Fees", "Cash", "Card payments", UNCATEGORISED,
 ]
+
+# Bank debits that pay a card company. The card statement already lists the purchases,
+# so these payments are kept out of spending (they are marked as transfers).
+CARD_COMPANY_HINTS = ("AFFINITY", "WIZINK", "COFIDIS", "CETELEM", "UNIVERSO")
+
+
+def is_card_payment(description: str, amount: Decimal, bank_institution: str) -> bool:
+    return (bank_institution == "activobank" and amount < 0
+            and any(h in (description or "").upper() for h in CARD_COMPANY_HINTS))
 
 
 def categorize(description: str, amount: Decimal | None = None,
