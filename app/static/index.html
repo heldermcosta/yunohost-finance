@@ -188,6 +188,18 @@ tr.total:hover td { background: var(--card-2); }
 .dual input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--focus); }
 #ov-range-label { margin: 10px 0 0; }
 
+/* Drop PDFs anywhere: a dimmed hint covers the page while files are dragged over it */
+.drop-hint {
+  position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); pointer-events: none;
+}
+.drop-hint.open { display: flex; }
+.drop-hint > div {
+  border: 2px dashed var(--accent); border-radius: 18px; padding: 40px 48px; background: var(--card); box-shadow: var(--shadow-lg);
+  text-align: center; margin: 24px;
+}
+.drop-hint strong { font-size: 18px; color: var(--accent); }
+
 /* PDF viewer: 90% of the screen, with download */
 .pdf-overlay { padding: 0; }
 .pdf-modal {
@@ -584,6 +596,7 @@ tr.cg-row td:first-child { width: 28px; }
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="drop-hint" id="drop-hint" aria-hidden="true"><div><strong id="drop-hint-text"></strong></div></div>
 <div class="overlay" id="pdf-overlay" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
   <div class="pdf-modal">
     <div class="pdf-bar">
@@ -1482,9 +1495,12 @@ async function uploadOne(file, accountId, password) {
   return api("statements", { method: "POST", body: form });
 }
 
-$("up-go").addEventListener("click", async () => {
-  const files = [...$("up-files").files];
+// Imports a list of PDFs. Used by the Import button and by dropping files anywhere in the app.
+let importing = false;
+async function importFiles(files) {
+  if (importing) { toast("warn", L("An import is already running.", "Já há uma importação em curso.")); return; }
   if (!files.length) { toast("warn", lang === "pt" ? "Escolha pelo menos um PDF." : "Choose at least one PDF."); return; }
+  importing = true;
   const accountId = $("up-account").value || null;
   const queue = $("up-queue");
   queue.replaceChildren();
@@ -1555,8 +1571,33 @@ $("up-go").addEventListener("click", async () => {
   $("up-summary").textContent = t("summary_done", { ok: counts.ok, dup: counts.dup, err: counts.err });
   $("up-files").value = "";
   $("up-go").disabled = false;
+  importing = false;
   refreshReviewBadge();
   loadAccounts().catch(() => {});
+}
+$("up-go").addEventListener("click", () => importFiles([...$("up-files").files]));
+
+// Drop PDF statements anywhere in the app: the Import tab opens and the files are imported.
+const isPdf = (f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+let dragDepth = 0;
+function setDropHint(on) {
+  $("drop-hint-text").textContent = L("Drop PDF statements to import them", "Largue extratos em PDF para os importar");
+  $("drop-hint").classList.toggle("open", on);
+}
+window.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; setDropHint(true); });
+window.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+window.addEventListener("dragleave", (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) setDropHint(false); });
+window.addEventListener("drop", (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0; setDropHint(false);
+  const all = [...e.dataTransfer.files];
+  const pdfs = all.filter(isPdf);
+  if (!pdfs.length) { toast("warn", L("Only PDF statements can be imported.", "Só se podem importar extratos em PDF.")); return; }
+  if (pdfs.length < all.length) toast("warn", L(`${all.length - pdfs.length} file(s) were not PDFs and were skipped.`, `${all.length - pdfs.length} ficheiro(s) não eram PDF e foram ignorados.`));
+  showTab("import");
+  importFiles(pdfs).catch(err => toast("error", errorText(err)));
 });
 
 LOADERS.import = async () => { await loadAccounts(); };
