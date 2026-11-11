@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import date
@@ -774,6 +775,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def change(now: Decimal, before: Decimal) -> float | None:
             return round(float((now - before) / before * 100), 1) if before > 0 else None
 
+        # One row per month of the period, so the page can show how the period was made up.
+        months = []
+        for m in period:
+            inc, exp = totals(by_month.get(m, []))
+            months.append({"month": m, "income": str(inc), "expenses": str(exp), "net": str(inc - exp)})
+
         earlier = [m for m in with_data if m < start][-3:]
         avg_3m = (sum((totals(by_month[m])[1] for m in earlier), Decimal("0")) / len(earlier)) if earlier else None
 
@@ -837,10 +844,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         uncategorised = [t for t in expense_rows if t.category == UNCATEGORISED]
 
-        # Latest accepted statement per account, for balances.
+        # Latest accepted statement per account that ends by the last month of the period.
         visible = visible_ids(session, user)
+        last_day = date(int(month[:4]), int(month[5:]), monthrange(int(month[:4]), int(month[5:]))[1])
         latest: dict[int, Statement] = {}
-        for st in (session.query(Statement).filter(Statement.account_id.in_(visible), Statement.status == "accepted")
+        for st in (session.query(Statement).filter(Statement.account_id.in_(visible), Statement.status == "accepted",
+                                                   Statement.period_end <= last_day)
                    .order_by(Statement.period_end.desc(), Statement.id.desc()).all()):
             latest.setdefault(st.account_id, st)
         labels = account_labels(session, user)
@@ -865,6 +874,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "previous_income": str(prev_income), "previous_expenses": str(prev_expenses),
             "income_change": change(income, prev_income), "expenses_change": change(expenses, prev_expenses),
             "average_expenses_3m": str(avg_3m.quantize(Decimal("0.01"))) if avg_3m is not None else None,
+            "months": months,
             "categories": categories,
             "top_merchants": [{"name": m["name"], "total": str(m["total"]), "count": m["count"]} for m in top_merchants],
             "largest_expenses": [{"booked_on": t.booked_on.isoformat(), "description": t.description,
