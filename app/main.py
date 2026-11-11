@@ -573,17 +573,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for t in rows:
             key = _description_key(t.description) or t.description.strip().upper()[:30]
             g = groups.setdefault(key, {"key": key, "count": 0, "total": Decimal("0"),
-                                        "ids": [], "examples": []})
+                                        "ids": [], "items": [], "examples": []})
             g["count"] += 1
             g["total"] += t.amount
             g["ids"].append(t.id)
+            g["items"].append({"id": t.id, "booked_on": t.booked_on.isoformat(),
+                               "description": t.description, "amount": str(t.amount)})
             if len(g["examples"]) < 3 and t.description not in g["examples"]:
                 g["examples"].append(t.description)
         ordered = sorted(groups.values(), key=lambda g: (-g["count"], -abs(g["total"]), g["key"]))
         return {
             "total": len(rows),
             "groups": [{"key": g["key"], "count": g["count"], "total": str(g["total"].quantize(Decimal("0.01"))),
-                        "examples": g["examples"], "ids": g["ids"]}
+                        "examples": g["examples"], "ids": g["ids"], "items": g["items"]}
                        for g in ordered[:min(limit, 1000)]],
         }
 
