@@ -114,7 +114,8 @@ SECTION_BREAK_RE = re.compile(
     r'DETALHE DE VALORES A PAGAR|Valores Antecipados|Resumo Mensalidade por Modalidade',
     re.IGNORECASE)
 MODALIDADE_FIM_MES_RE = re.compile(r'^Modalidade Fim M[eê]s\s*$', re.IGNORECASE)
-OUTROS_MOV_RE = re.compile(r'^Outros Movimentos Financeiros\s*$', re.IGNORECASE)
+# 2020 statements print "Outros Movimentos Financeiros"; 2022-2023 print "OUTROS MOVIMENTOS".
+OUTROS_MOV_RE = re.compile(r'^Outros Movimentos(?: Financeiros)?\s*$', re.IGNORECASE)
 
 
 def clean_amount_pt(s):
@@ -155,6 +156,10 @@ def _account_number(text):
 
 
 # --------------------------------------------------------------------- OLD
+
+# Periods that really are the irregular Feb-Jun 2020 cluster described above.
+KNOWN_IRREGULAR_MONTHS = {"2020-02", "2020-03", "2020-04", "2020-05", "2020-06"}
+
 
 def _parse_old_era(text, filename):
     pm = OLD_PERIOD_RE.search(text)
@@ -273,14 +278,20 @@ def _parse_old_era(text, filename):
         credit_total = sum(t['credit'] for t in transactions if t['credit'])
         computed = round(debit_total - credit_total, 2)
         if abs(computed - saldo_final) > 0.01:
-            anomalies.append(
-                f"does not reconcile under the standard 'opening always 0,00' formula "
-                f"(computed {computed}, printed SALDO EM DÍVIDA {saldo_final}) - this statement falls "
-                f"within a known irregular Fev-Jun 2020 cluster (a large disputed/foreign charge, a "
-                f"partial REEMBOLSO, and manual PAGAMENTO POR ATM payments) where a real balance appears "
-                f"to have been carried forward in a way the printed SALDO EM DÍVIDA does not reveal - "
-                f"left unreconciled rather than guessed at, see the project doc"
-            )
+            if period_start[:7] in KNOWN_IRREGULAR_MONTHS:
+                anomalies.append(
+                    f"does not reconcile under the standard 'opening always 0,00' formula "
+                    f"(computed {computed}, printed SALDO EM DÍVIDA {saldo_final}) - this statement falls "
+                    f"within a known irregular Fev-Jun 2020 cluster (a large disputed/foreign charge, a "
+                    f"partial REEMBOLSO, and manual PAGAMENTO POR ATM payments) where a real balance appears "
+                    f"to have been carried forward in a way the printed SALDO EM DÍVIDA does not reveal - "
+                    f"left unreconciled rather than guessed at, see the project doc"
+                )
+            else:
+                anomalies.append(
+                    f"does not reconcile (computed {computed}, printed SALDO EM DÍVIDA {saldo_final}) - "
+                    f"compare the rows with the statement before accepting"
+                )
 
     return {
         'period_start': period_start,
