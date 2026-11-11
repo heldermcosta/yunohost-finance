@@ -73,6 +73,10 @@ AMT_RE = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}')
 TRAILING_AMT_RE = re.compile(r'-?\d{1,3}(?:\.\d{3})*,\d{2}\s*€?\s*$')
 PERIOD_RE = re.compile(r'Per[ií]odo de extrato de\s+(\d{2}/\d{2}/\d{4})\s+a\s+(\d{2}/\d{2}/\d{4})')
 ACCOUNT_RE = re.compile(r'Cart[aã]o n[ºo°]\s*(\S+)', re.IGNORECASE)
+# The dossier number identifies the customer's account and stays the same when
+# the card is reissued. The masked card number changes with each new card
+# (…13865X, …28151X, …30720X on one account), so it must not identify the account.
+DOSSIER_RE = re.compile(r'Dossier\s*\n?\s*(\d{6,})', re.IGNORECASE)
 HEADER_ANCHOR_RE = re.compile(r'Descritivo', re.IGNORECASE)
 RESUMO_ANCHOR_RE = re.compile(r'RESUMO DOS MOVIMENTOS NO PER[IÍ]ODO DO EXTRATO', re.IGNORECASE)
 RESUMO_ROW_RE = re.compile(r'^(?:-?\d{1,3}(?:\.\d{3})*,\d{2}€\s*){8,}$')
@@ -110,8 +114,12 @@ def parse_cofidis(text, filename):
     period_start = to_iso(pm.group(1))
     period_end = to_iso(pm.group(2))
 
-    acc = ACCOUNT_RE.search(text)
-    account_number = acc.group(1) if acc else None
+    dossier = DOSSIER_RE.search(text)
+    if dossier:
+        account_number = dossier.group(1)
+    else:
+        acc = ACCOUNT_RE.search(text)
+        account_number = acc.group(1) if acc else None
 
     saldo_inicial = saldo_final = None
     resumo_encargos = None

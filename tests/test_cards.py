@@ -80,3 +80,22 @@ def test_cetelem_2026_rows_with_two_digit_years_are_read():
     assert st.transactions[0].amount == Decimal("-10.00")
     assert st.transactions[0].booked_on.isoformat() == "2026-08-20"
     assert reconcile(st).status == "ok"
+
+
+def test_cofidis_account_is_the_dossier_not_the_reissued_card_number():
+    from app.parsers.cards.cofidis import parse_cofidis
+
+    def statement(card):
+        return "\n".join([
+            "Nº de Dossier",
+            "50000005140553",
+            "Nº de Cartão",
+            f"XXXXXXXXXX{card}",
+            "Período de extrato de 09/12/2020 a 07/01/2021",
+            "Descritivo",
+        ])
+
+    # Same customer, two cards: the account must be the dossier so both land in one account.
+    old = parse_cofidis(statement("13865X"), "a.pdf")
+    new = parse_cofidis(statement("30720X"), "b.pdf")
+    assert old["account_number"] == new["account_number"] == "50000005140553"
