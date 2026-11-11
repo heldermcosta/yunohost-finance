@@ -544,3 +544,22 @@ def test_bulk_delete_removes_owned_statements_and_skips_the_rest(client, text_by
 def test_bulk_delete_rejects_a_malformed_body(client):
     r = client.post("/api/statements/bulk-delete", headers=as_user("helder"), json={"ids": "1"})
     assert r.status_code == 422
+
+
+def test_uncategorised_groups_are_sorted_by_frequency(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 groups"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    # Recategorise everything back to Uncategorised so the page has rows to group.
+    listed = client.get("/api/transactions?limit=1000", headers=as_user("helder")).json()["items"]
+    client.post("/api/transactions/bulk-category", headers=as_user("helder"),
+                json={"ids": [t["id"] for t in listed], "category": "Uncategorised"})
+
+    data = client.get("/api/uncategorised/groups", headers=as_user("helder")).json()
+    counts = [g["count"] for g in data["groups"]]
+    assert counts == sorted(counts, reverse=True)
+    assert sum(counts) == data["total"] > 0
+    ids = [i for g in data["groups"] for i in g["ids"]]
+    assert sorted(ids) == sorted(t["id"] for t in listed if not t["is_transfer"])
+    assert all(g["examples"] for g in data["groups"])
