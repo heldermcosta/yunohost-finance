@@ -576,6 +576,27 @@ def test_insights_for_a_month(client, text_by_pdf):
     assert client.get("/api/insights?month=2026-13", headers=as_user("helder")).status_code == 422
 
 
+def test_insights_has_one_row_per_month_of_the_period(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 insights-months"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    data = client.get("/api/insights?month=2026-05&start=2026-04", headers=as_user("helder")).json()
+    assert [m["month"] for m in data["months"]] == ["2026-04", "2026-05"]
+    assert sum((Decimal(m["expenses"]) for m in data["months"]), Decimal("0")) == Decimal(data["expenses"])
+    assert all(Decimal(m["net"]) == Decimal(m["income"]) - Decimal(m["expenses"]) for m in data["months"])
+
+
+def test_balances_are_as_of_the_end_of_the_period(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 balances-period"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    # The statement ends in May 2026, so a period ending in April has no balance for this account yet.
+    assert client.get("/api/insights?month=2026-04", headers=as_user("helder")).json()["balances"] == []
+    assert client.get("/api/insights?month=2026-05", headers=as_user("helder")).json()["balances"]
+
+
 def test_insights_empty_database(client):
     make_account(client, "helder")
     assert client.get("/api/insights", headers=as_user("helder")).json() == {"month": None}
