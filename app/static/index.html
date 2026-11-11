@@ -1202,13 +1202,14 @@ LOADERS.categorise = async () => {
   $("cg-count").textContent = t("cg_count", { n: data.total, g: groups.length });
   if (!groups.length) { $("cg-list").replaceChildren(el("p", { class: "muted", text: t("cg_none") })); return; }
 
-  const categoryPicker = () => el("select", {}, [el("option", { value: "", text: t("cg_choose") }),
-    ...cache.categories.map(c => el("option", { value: c, text: c }))]);
+  // A text box with a shared list: typing filters the categories as you type.
+  const categoryPicker = () => el("input", { type: "text", list: "cg-categories", placeholder: t("cg_choose"), autocomplete: "off", class: "cg-cat" });
+  const categoryList = el("datalist", { id: "cg-categories" }, cache.categories.map(c => el("option", { value: c })));
   const rowFor = (g) => {
     const cat = categoryPicker();
     const rule = el("input", { type: "checkbox", checked: g.key.length >= 2 });
     const apply = el("button", { class: "small", text: t("cg_apply"), on: { click: async () => {
-      if (!cat.value) { toast("error", t("cg_choose")); return; }
+      if (!cache.categories.includes(cat.value)) { toast("error", t("cg_choose")); return; }
       if (!(await confirmBox(t("cg_confirm", { n: g.count, c: cat.value })))) return;
       try {
         let updated = 0;
@@ -1232,7 +1233,7 @@ LOADERS.categorise = async () => {
       el("td", {}, [apply, " ", skip]),
     ]);
   };
-  $("cg-list").replaceChildren(el("table", {}, [
+  $("cg-list").replaceChildren(categoryList, el("table", {}, [
     el("thead", {}, el("tr", {}, [t("cg_col_count"), t("cg_col_merchant"), t("cg_col_total"), t("cg_col_category"), "", ""].map(h => el("th", { text: h })))),
     el("tbody", {}, groups.map(rowFor)),
   ]));
