@@ -507,6 +507,19 @@ def test_uncategorised_group_items_name_the_bank_account(client, text_by_pdf):
     assert groups and all(item["account"] for g in groups for item in g["items"])
 
 
+def test_a_transaction_opens_the_pdf_it_came_from(client, text_by_pdf):
+    account_id = make_account(client, "helder")
+    pdf = b"%PDF-1.4 origin-of-transaction"
+    text_by_pdf[pdf] = basic_statement()
+    upload(client, "helder", account_id, pdf)
+    items = client.get("/api/transactions", headers=as_user("helder")).json()["items"]
+    statement_id = items[0]["statement_id"]
+    assert statement_id is not None
+    r = client.get(f"/api/statements/{statement_id}/pdf", headers=as_user("helder"))
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF")
+
+
 def test_insights_period_is_the_sum_of_its_months(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 insights-period"

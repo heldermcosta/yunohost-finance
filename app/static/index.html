@@ -1070,6 +1070,21 @@ async function download(path, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   } catch (e) { toast("error", errorText(e)); }
 }
+// Opens the statement a transaction came from in a new tab.
+async function openStatementPdf(statementId) {
+  try {
+    const r = await fetch(API + `statements/${statementId}/pdf`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error(t("err_generic", { status: r.status }));
+    const url = URL.createObjectURL(await r.blob());
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast("error", errorText(e)); }
+}
+const pdfButton = (statementId) => statementId
+  ? el("button", { class: "small", type: "button", text: L("PDF", "PDF"), title: L("Open the statement this came from", "Abrir o extrato de origem"),
+                   "aria-label": L("Open the statement this came from", "Abrir o extrato de origem"),
+                   on: { click: () => openStatementPdf(statementId) } })
+  : null;
 $("ex-csv").addEventListener("click", () => download("export/transactions.csv", "transactions.csv"));
 $("ex-xlsx").addEventListener("click", () => download("export/transactions.xlsx", "transactions.xlsx"));
 $("ex-pdf").addEventListener("click", () => download("export/report.pdf?year=" + $("ex-year").value, "report-" + $("ex-year").value + ".pdf"));
@@ -1155,7 +1170,7 @@ LOADERS.transactions = async () => {
       el("td", { class: "cat" }, catSelect),
       el("td", { text: tx.account }),
       el("td", { class: "num " + (amt < 0 ? "neg" : "pos"), text: eur.format(amt) }),
-      el("td", {}, transferBtn),
+      el("td", {}, [pdfButton(tx.statement_id), " ", transferBtn]),
     ]);
   });
   $("tx-table").replaceChildren(el("table", {}, [
@@ -1569,7 +1584,7 @@ function renderCategorise() {
   const categoryList = el("datalist", { id: "cg-categories" }, cache.categories.map(c => el("option", { value: c })));
 
   const detailRow = (g) => el("tr", {}, el("td", { colspan: 7 }, el("table", {}, [
-    el("thead", {}, el("tr", {}, [t("cg_in_group"), t("cg_date"), L("Bank", "Banco"), t("cg_description"), t("cg_amount")].map(h => el("th", { text: h })))),
+    el("thead", {}, el("tr", {}, [t("cg_in_group"), t("cg_date"), L("Bank", "Banco"), t("cg_description"), t("cg_amount"), L("Statement", "Extrato")].map(h => el("th", { text: h })))),
     el("tbody", {}, g.items.map(i => el("tr", {}, [
       el("td", {}, el("input", { type: "checkbox", checked: !(cgExcluded.get(g.key) || new Set()).has(i.id),
         on: { change: e => {
@@ -1580,6 +1595,7 @@ function renderCategorise() {
         } } })),
       el("td", { text: i.booked_on }),
       el("td", { text: i.account || "–" }),
+      el("td", {}, pdfButton(i.statement_id)),
       el("td", { class: "desc", text: i.description }),
       el("td", { text: i.amount }),
     ]))),
