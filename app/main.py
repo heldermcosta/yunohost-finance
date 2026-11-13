@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import re
 from calendar import monthrange
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
@@ -23,7 +23,7 @@ from . import access, crypto, exports
 from .duplicates import StatementMovements, find_duplicate_statements, movement_signature, repeated_amounts
 from .version import __version__
 from .auth import username_from_authorization
-from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, in_category, parent_of
+from .categories import DEFAULT_CATEGORIES, SEPARATOR, UNCATEGORISED, categorize, in_category, parent_of
 from .config import Settings
 from .db import setup_schema
 from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, SamePeriodStatement, WrongAccount,
@@ -714,12 +714,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                "description": t.description, "amount": str(t.amount)})
             if len(g["examples"]) < 3 and t.description not in g["examples"]:
                 g["examples"].append(t.description)
-        ordered = sorted(groups.values(), key=lambda g: (-g["count"], -abs(g["total"]), g["key"]))
+        # Suggested category per group: how the same merchant was categorised before, else the built-in keywords.
+        ignored = _ignored_terms(user)
+        history: dict[str, Counter] = defaultdict(Counter)
+        for t in (accepted_query(session, user)
+                  .filter(Transaction.category != UNCATEGORISED, Transaction.is_transfer.is_(False)).all()):
+            history[_description_key(t.description, ignored) or t.description.strip().upper()[:30]][t.category] += 1
+        rules = user_rules(session, user)
+
+        def suggestion(g: dict) -> dict | None:
+            if history.get(g["key"]):
+                category, uses = history[g["key"]].most_common(1)[0]
+                return {"category": category, "source": "history", "uses": uses}
+            category, _source = categorize(g["examples"][0] if g["examples"] else g["key"], None, rules)
+            return {"category": category, "source": "keyword", "uses": 0} if category != UNCATEGORISED else None
+
+        ordered = sorted(groups.values(), key=lambda g: (-g["count"], -abs(g["total"]), g["key"]))[:min(limit, 1000)]
         return {
             "total": len(rows),
             "groups": [{"key": g["key"], "count": g["count"], "total": str(g["total"].quantize(Decimal("0.01"))),
-                        "examples": g["examples"], "ids": g["ids"], "items": g["items"]}
-                       for g in ordered[:min(limit, 1000)]],
+                        "examples": g["examples"], "ids": g["ids"], "items": g["items"],
+                        "suggestion": suggestion(g)}
+                       for g in ordered],
         }
 
     @app.get("/api/summary/monthly")

@@ -2014,7 +2014,7 @@ function renderCategorise() {
   const groupRow = (g) => {
     const chosen = cgChosen(g);
     const cat = categoryPicker();
-    cat.value = cgCategory.get(g.key) || "";
+    cat.value = cgCategory.get(g.key) || (g.suggestion ? g.suggestion.category : "");
     cat.addEventListener("input", () => cgCategory.set(g.key, cat.value));
     const obj = el("input", { type: "text", list: "objects-list", placeholder: t("object"), autocomplete: "off" });
     obj.value = cgObject.get(g.key) || "";
@@ -2046,7 +2046,10 @@ function renderCategorise() {
       renderCategorise();
     } } }, [
       el("td", { text: chosen.length === g.count ? String(g.count) : `${chosen.length} / ${g.count}` }),
-      el("td", {}, [el("strong", { text: g.key }), el("div", { class: "muted desc", text: g.examples.join(" · ") })]),
+      el("td", {}, [el("strong", { text: g.key }), el("div", { class: "muted desc", text: g.examples.join(" · ") }),
+        g.suggestion ? el("div", { class: "muted desc", text: g.suggestion.source === "history"
+          ? L(`Suggested: ${g.suggestion.category} (used ${g.suggestion.uses}×)`, `Sugerido: ${g.suggestion.category} (usado ${g.suggestion.uses}×)`)
+          : L(`Suggested: ${g.suggestion.category} (from keywords)`, `Sugerido: ${g.suggestion.category} (por palavras-chave)`) }) : null]),
       el("td", { text: g.total }),
       el("td", {}, cat),
       el("td", {}, obj),
@@ -2056,7 +2059,27 @@ function renderCategorise() {
     return cgOpen.has(g.key) ? [row, detailRow(g)] : [row];
   };
 
-  $("cg-list").replaceChildren(categoryList, el("table", {}, [
+  // Applies each group's suggested category to the movements still ticked in it.
+  const withSuggestion = cgGroups.filter(g => g.suggestion && cache.categories.includes(g.suggestion.category));
+  const suggestedCount = withSuggestion.reduce((n, g) => n + cgChosen(g).length, 0);
+  const applyAll = el("button", { class: "primary small", type: "button", disabled: !suggestedCount,
+    text: L(`Apply all suggestions (${suggestedCount})`, `Aplicar todas as sugestões (${suggestedCount})`),
+    on: { click: async () => {
+      if (!(await confirmBox(L(`Apply the suggested category to ${suggestedCount} movements in ${withSuggestion.length} merchants?`,
+                               `Aplicar a categoria sugerida a ${suggestedCount} movimentos em ${withSuggestion.length} comerciantes?`)))) return;
+      try {
+        let updated = 0;
+        for (const g of withSuggestion) {
+          const ids = cgChosen(g);
+          if (!ids.length) continue;
+          const r = await api("transactions/bulk-category", { method: "POST", json: { ids, category: g.suggestion.category, object_name: null, save_rule: null } });
+          updated += r.updated;
+        }
+        toast("success", t("bulk_updated", { n: updated }));
+        LOADERS.categorise();
+      } catch (e) { toast("error", errorText(e)); }
+    } } });
+  $("cg-list").replaceChildren(categoryList, el("p", {}, [applyAll]), el("table", {}, [
     el("thead", {}, el("tr", {}, [t("cg_col_count"), t("cg_col_merchant"), t("cg_col_total"), t("cg_col_category"), t("object"), "", ""].map(h => el("th", { text: h })))),
     el("tbody", {}, cgGroups.flatMap(groupRow)),
   ]));
