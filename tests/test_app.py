@@ -595,6 +595,28 @@ def test_excel_summary_shows_spending_as_negative(client, text_by_pdf):
     assert values and all(v <= 0 for v in values if v is not None)
 
 
+def test_uncategorised_group_suggests_the_category_used_for_the_same_merchant(client, text_by_pdf):
+    from tests.test_activobank import row, statement
+    account_id = make_account(client, "helder")
+    first = b"%PDF-1.4 suggest-first"
+    text_by_pdf[first] = basic_statement()
+    upload(client, "helder", account_id, first)
+    groups = client.get("/api/uncategorised/groups", headers=as_user("helder")).json()["groups"]
+    assert all("suggestion" in g for g in groups)
+    fee = next(t for g in groups for t in g["items"] if "PAG SERV EXEMPLO" in t["description"])
+    client.patch(f"/api/transactions/{fee['id']}", headers=as_user("helder"), json={"category": "Bank Fees"})
+
+    later = b"%PDF-1.4 suggest-later"
+    text_by_pdf[later] = statement("2026/06/01 A 2026/06/30", "1 000.00",
+                                   [row("06.01", "06.01", "PAG SERV EXEMPLO", Decimal("-50.00"), Decimal("950.00"))],
+                                   "950.00")
+    upload(client, "helder", account_id, later)
+    groups = client.get("/api/uncategorised/groups", headers=as_user("helder")).json()["groups"]
+    group = next(g for g in groups if any("PAG SERV EXEMPLO" in t["description"] for t in g["items"]))
+    assert group["suggestion"]["category"] == "Bank Fees"
+    assert group["suggestion"]["source"] == "history"
+
+
 def test_insights_has_one_row_per_month_of_the_period(client, text_by_pdf):
     account_id = make_account(client, "helder")
     pdf = b"%PDF-1.4 insights-months"
