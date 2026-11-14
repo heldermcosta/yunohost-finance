@@ -188,6 +188,10 @@ def test_bill_upload_summary_and_delete(client, bill_texts):
     assert 1 not in places["Lisboa"]["missing"]["electricity"]          # February has its bill
     assert places["Lisboa"]["missing"]["electricity"] == [m for m in range(12) if m != 1]  # the other months are gaps
 
+    grid = client.get("/api/bills/grid", headers=as_user("helder")).json()
+    lisboa = next(g for g in grid if g["name"] == "Lisboa")
+    assert lisboa["utilities"] == ["electricity"] and lisboa["years"] == [{"year": 2018, "months": {"electricity": [None, 52.42] + [None] * 10}}]
+
     bill_id = rows[0]["id"]
     assert client.delete(f"/api/bills/{bill_id}", headers=as_user("helder")).status_code == 200
     assert client.get("/api/bills", headers=as_user("helder"), params={"year": 2018}).json() == []

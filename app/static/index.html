@@ -125,10 +125,11 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .bill-place { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px; background: var(--card); }
 .bill-place-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bill-place h3 { margin: 0; font-size: 16px; }
-.bill-gap { color: var(--bad); background: var(--bad-soft); border-radius: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; }
-.bill-gaps-line { color: var(--warn); font-size: 13px; margin: 6px 0; }
-.bill-amt { white-space: nowrap; }
-.bill-place table { min-width: 460px; }
+.bill-place table.bill-grid { min-width: 760px; font-size: 12px; }
+.bill-place table.bill-grid th, .bill-place table.bill-grid td { padding: 6px 6px; text-align: right; }
+.bill-place table.bill-grid th { text-align: center; }
+.bill-cell { vertical-align: top; min-width: 62px; }
+.bill-line { white-space: nowrap; min-height: 1.3em; }
 th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th {
   font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap;
@@ -632,7 +633,6 @@ tr.cg-row td:first-child { width: 28px; }
         <div class="wide"><h2 id="bl-title">Bills by house</h2><p class="muted" id="bl-intro"></p></div>
         <div class="auto"><label for="bl-year" id="bl-year-label">Year</label><select id="bl-year"></select></div>
         <div class="auto"><label for="bl-utility" id="bl-utility-label">Utility</label><select id="bl-utility"></select></div>
-        <div class="auto" style="align-self:flex-end"><label><input type="checkbox" id="bl-gaps"> <span id="bl-gaps-label"></span></label></div>
       </div>
       <div id="bl-table"></div>
     </div>
@@ -1833,12 +1833,11 @@ const BILL_ICON = { electricity: "⚡", gas: "🔥", water: "💧", telecom: "�
 const wrapTable = (table) => el("div", { class: "table-wrap" }, [table]);
 const billMonths = () => (lang === "pt" ? ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
                                        : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
-let billsYear = null, billsUtility = "", billsHouse = "", billsSummary = null;
+let billsYear = null, billsUtility = "", billsHouse = "";
 
 function setBillsLabels() {
   $("tab-btn-bills").textContent = L("Bills", "Faturas");
   $("bl-title").textContent = L("Bills by place", "Faturas por local");
-  $("bl-gaps-label").textContent = L("Only months with missing bills", "Só meses com faturas em falta");
   $("bl-intro").textContent = L("Each bill counts in the month its billing period ends. Bills are separate from bank movements.",
                                 "Cada fatura conta no mês em que termina o período de faturação. As faturas são separadas dos movimentos bancários.");
   $("bl-year-label").textContent = L("Year", "Ano");
@@ -1864,59 +1863,35 @@ function billDeleteButton(bill, message) {
   } } });
 }
 
-// Names of consecutive months, e.g. [2, 3, 7] -> "mar–abr, ago".
-function monthRanges(indexes, months) {
-  const parts = [];
-  let start = null, prev = null;
-  const flush = () => { if (start !== null) parts.push(start === prev ? months[start] : `${months[start]}–${months[prev]}`); };
-  for (const m of indexes) {
-    if (prev !== null && m === prev + 1) { prev = m; continue; }
-    flush(); start = m; prev = m;
-  }
-  flush();
-  return parts.join(", ");
-}
-
-function billPlaceCard(p, months, gapsOnly) {
-  const utils = Object.keys(p.utilities);
-  const shown = [...Array(12).keys()].filter(m => !gapsOnly || utils.some(u => p.missing[u].includes(m)));
-  const yearTotal = utils.reduce((acc, u) => acc + p.utilities[u].reduce((a, v) => a + (v || 0), 0), 0);
-  const gaps = utils.filter(u => p.missing[u].length);
-  const rows = shown.map(m => {
-    const monthTotal = utils.reduce((a, u) => a + (p.utilities[u][m] || 0), 0);
-    return [months[m], ...utils.map(u => {
-      const v = p.utilities[u][m];
-      return v == null
-        ? el("span", { class: "bill-gap", text: `${BILL_ICON[u]} ${L("missing", "em falta")}` })
-        : el("span", { class: "bill-amt", text: `${BILL_ICON[u]} ${outgoing(v)}` });
-    }), outgoing(monthTotal)];
-  });
-  const headers = [L("Month", "Mês"), ...utils.map(u => `${BILL_ICON[u]} ${BILL_UTILITY[u]()}`), L("Total", "Total")];
-  const title = p.house ? p.name : `${p.name} (${L("not assigned", "por atribuir")})`;
+// One table per place: a row per year, a column per month. Each cell stacks the utilities the place has:
+// an icon and the amount, or nothing when that month has no bill.
+function billGridCard(place, months) {
+  const fmt = (v) => (v == null ? "\u00a0" : v.toFixed(2));
+  const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), ...months.map(m => el("th", { text: m }))]);
+  const body = place.years.map(y => el("tr", {}, [
+    el("th", { text: String(y.year) }),
+    ...months.map((_, m) => el("td", { class: "bill-cell" }, place.utilities.map(u =>
+      el("div", { class: "bill-line", text: `${BILL_ICON[u]} ${fmt(y.months[u][m])}` })))),
+  ]));
+  const title = place.house ? place.name : `${place.name} (${L("not assigned", "por atribuir")})`;
   return el("div", { class: "bill-place" }, [
     el("div", { class: "bill-place-head" }, [
       el("h3", { text: title }),
-      p.house ? el("button", { class: "small", type: "button", text: L("Show its bills", "Ver as faturas"), on: { click: () => {
-        billsHouse = p.name; $("bl-house").value = p.name; loadBillsList().catch(e => toast("error", errorText(e)));
+      place.house ? el("button", { class: "small", type: "button", text: L("Show its bills", "Ver as faturas"), on: { click: () => {
+        billsHouse = place.name; $("bl-house").value = place.name; loadBillsList().catch(e => toast("error", errorText(e)));
         $("bl-house").scrollIntoView({ behavior: "smooth", block: "center" });
       } } }) : null,
     ]),
-    el("p", { class: "muted", text: `${L("Year total", "Total do ano")}: ${outgoing(yearTotal)}` }),
-    ...gaps.map(u => el("p", { class: "bill-gaps-line", text:
-      `${BILL_ICON[u]} ${BILL_UTILITY[u]()}: ${L("no bill for", "sem fatura em")} ${monthRanges(p.missing[u], months)}` })),
-    wrapTable(simpleTable(headers, rows)),
+    el("p", { class: "muted", text: `${place.utilities.map(u => `${BILL_ICON[u]} ${BILL_UTILITY[u]()}`).join("   ")} · ${L("amounts in €", "valores em €")}` }),
+    wrapTable(el("table", { class: "bill-grid" }, [el("thead", {}, header), el("tbody", {}, body)])),
   ]);
 }
 
-function renderBillsTable(s) {
+function renderBillsGrid(places) {
   const months = billMonths();
-  const gapsOnly = $("bl-gaps").checked;
-  const places = s.places.filter(p => !gapsOnly || Object.values(p.missing).some(g => g.length));
   $("bl-table").replaceChildren(...(places.length
-    ? places.map(p => billPlaceCard(p, months, gapsOnly))
-    : [el("p", { class: "muted", text: gapsOnly
-        ? L("No missing bills in this year.", "Não há faturas em falta neste ano.")
-        : L("No bills for this year.", "Sem faturas neste ano.") })]));
+    ? places.map(p => billGridCard(p, months))
+    : [el("p", { class: "muted", text: L("No bills yet.", "Ainda não há faturas.") })]));
 }
 
 async function loadBillsList() {
@@ -1982,14 +1957,12 @@ LOADERS.bills = async () => {
   $("bl-utility").replaceChildren(el("option", { value: "", text: L("All", "Todas") }),
     ...s.utilities.map(u => el("option", { value: u, text: BILL_UTILITY[u]() })));
   $("bl-utility").value = billsUtility;
-  billsSummary = s;
-  renderBillsTable(s);
+  renderBillsGrid(await api("bills/grid"));
   await loadBillHouses(s);
   await Promise.all([loadBillsList(), loadBillReview(s.review)]);
 };
 
 $("bl-year").addEventListener("change", () => { billsYear = Number($("bl-year").value); LOADERS.bills().catch(e => toast("error", errorText(e))); });
-$("bl-gaps").addEventListener("change", () => { if (billsSummary) renderBillsTable(billsSummary); });
 $("bl-utility").addEventListener("change", () => { billsUtility = $("bl-utility").value; LOADERS.bills().catch(e => toast("error", errorText(e))); });
 $("bl-house").addEventListener("change", () => { billsHouse = $("bl-house").value; loadBillsList().catch(e => toast("error", errorText(e))); });
 $("bl-add").addEventListener("click", async () => {

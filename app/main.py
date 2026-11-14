@@ -1217,6 +1217,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "review": sum(1 for b in bills if b.status == "review"),
         }
 
+    @app.get("/api/bills/grid")
+    def bills_grid(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
+        """Every place with bills, one row per year and one column per month. A utility the place never had is left out."""
+        bills = session.query(Bill).filter_by(owner_id=user.id).all()
+        pairs = bill_pairs(session, user)
+        cells: dict[tuple, Decimal] = {}
+        order: dict[tuple[str, str], None] = {}
+        for b in bills:
+            if b.status != "ok" or b.period_end is None:
+                continue
+            name = house_for(b.location, pairs)
+            place = ("house", name) if name is not None else ("location", fold(b.location))
+            order.setdefault(place, None)
+            key = (place, b.period_end.year, b.utility, b.period_end.month - 1)
+            cells[key] = cells.get(key, Decimal("0")) + b.amount
+        utility_order = ["water", "electricity", "gas", "telecom"]
+        result = []
+        for place in order:
+            utilities = [u for u in utility_order if any(k[0] == place and k[2] == u for k in cells)]
+            years = sorted({k[1] for k in cells if k[0] == place}, reverse=True)
+            result.append({
+                "name": place[1], "house": place[0] == "house", "utilities": utilities,
+                "years": [{"year": y, "months": {u: [float(cells[(place, y, u, m)]) if (place, y, u, m) in cells else None
+                                                      for m in range(12)] for u in utilities}} for y in years],
+            })
+        return result
+
     @app.get("/api/bills")
     def list_bills(year: int | None = None, house: str | None = None, utility: str | None = None,
                    review: bool = False, user: User = Depends(get_current_user),
