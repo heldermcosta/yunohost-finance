@@ -125,10 +125,11 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .bill-place { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px; background: var(--card); }
 .bill-place-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bill-place h3 { margin: 0; font-size: 16px; }
-.bill-place table.bill-grid { min-width: 1000px; font-size: 12px; }
+.bill-place table.bill-grid { font-size: 12px; }
+.bill-total { font-weight: 600; text-align: right; white-space: nowrap; }
 .bill-place table.bill-grid th, .bill-place table.bill-grid td { padding: 6px 6px; text-align: right; }
 .bill-place table.bill-grid th { text-align: center; }
-.bill-cell { vertical-align: top; min-width: 80px; padding-left: 10px; padding-right: 10px; }
+.bill-cell { vertical-align: top; min-width: 66px; padding-left: 8px; padding-right: 8px; }
 .bill-line { white-space: nowrap; min-height: 1.3em; display: flex; justify-content: flex-end; }
 .bill-missing { background: var(--bad-soft); border-radius: 4px; }
 .bill-year { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
@@ -1899,7 +1900,8 @@ function billPickMenu(anchor, items) {
 // and each month cell lists the amounts in that same order. Clicking an amount opens its bill.
 function billGridCard(place, months) {
   const fmt = (v) => (v == null ? "\u00a0" : v.toFixed(2));
-  const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), ...months.map(m => el("th", { text: m }))]);
+  const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), ...months.map(m => el("th", { text: m })),
+                               el("th", { text: L("Total", "Total") })]);
   const body = place.years.map(y => el("tr", {}, [
     el("th", { class: "bill-year" }, [
       el("span", { text: String(y.year) }),
@@ -1914,6 +1916,7 @@ function billGridCard(place, months) {
         else billPickMenu(e.currentTarget, items);
       } } })]);
     }))),
+    el("td", { class: "bill-total", text: fmt(Object.values(y.months).flat().reduce((a, v) => a + (v || 0), 0)) }),
   ]));
   const title = place.house ? place.name : `${place.name} (${L("not assigned", "por atribuir")})`;
   return el("div", { class: "bill-place" }, [
