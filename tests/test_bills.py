@@ -182,6 +182,12 @@ def test_bill_upload_summary_and_delete(client, bill_texts):
     rows = client.get("/api/bills", headers=as_user("helder"), params={"year": 2018, "house": "Lisboa"}).json()
     assert len(rows) == 1 and rows[0]["invoice"] == "10213867688" and rows[0]["utility"] == "electricity"
 
+    places = {p["name"]: p for p in summary["places"]}
+    assert places["Lisboa"]["house"] is True
+    assert places["Lisboa"]["utilities"]["electricity"][1] == 52.42
+    assert 1 not in places["Lisboa"]["missing"]["electricity"]          # February has its bill
+    assert places["Lisboa"]["missing"]["electricity"] == [m for m in range(12) if m != 1]  # the other months are gaps
+
     bill_id = rows[0]["id"]
     assert client.delete(f"/api/bills/{bill_id}", headers=as_user("helder")).status_code == 200
     assert client.get("/api/bills", headers=as_user("helder"), params={"year": 2018}).json() == []
@@ -371,6 +377,80 @@ def test_epal_water_bill_is_read_despite_its_direct_debit_text():
     assert bill["period_start"] == date(2017, 3, 8) and bill["period_end"] == date(2017, 4, 6)
     assert bill["amount"] == 12.71
     assert bill["address"] == "R EXEMPLO DE MACEDO LOTE 1 6 C"
+    assert bill["status"] == "ok"
+
+
+AGUAS_2022 = """FATURA Nº
+202200000001
+Data de Emissão :
+22-11-2022
+Matriculada na Conservatória do Registo Comercial de Setúbal sob o número 504014889
+DADOS DO CONTRATO
+Titular:
+HELDER MIGUEL ALMEIDA COSTA
+230795870
+Local de consumo :
+HELDER MIGUEL ALMEIDA COSTA
+AV ALENTEJO (DO)
+9 - 05 ESQ
+SETÚBAL
+TOTAL A PAGAR
+8,92 €
+"""
+
+AGUAS_2019 = """FATURA nº 201900000002
+Tel: 265 549 300 - NIPC 504 014 889
+Data de Emissão: 2019.05.23
+Período de Faturação:
+18ABR2019 a 17MAI2019
+HELDER MIGUEL ALMEIDA COSTA
+AV ALENTEJO (DO)
+9 - 05 ESQ
+TOTAL A PAGAMENTO  €8.19
+"""
+
+
+def test_aguas_do_sado_bill_without_a_printed_period_is_kept_for_review():
+    bill = read_bill_texts(AGUAS_2022, AGUAS_2022)
+    assert bill["provider"] == "Águas do Sado" and bill["utility"] == "water"
+    assert bill["invoice"] == "202200000001" and bill["issued"] == date(2022, 11, 22)
+    assert bill["amount"] == 8.92 and bill["period_end"] is None
+    assert bill["address"] == "AV ALENTEJO (DO) 9-05 ESQ"
+    assert bill["status"] == "review"
+
+
+AGUAS_COMERCIAL = """FATURA Nº
+202200000003
+Data de Emissão :
+22-11-2022
+Matriculada na Conservatória do Registo Comercial de Setúbal sob o número 504014889
+Local de consumo :
+
+HELDER MIGUEL ALMEIDA COSTA
+230795870
+COM E IND
+000000003396599
+DN 15 mm|2,5 m3 / h
+RUA ROBERTO IVENS
+3- SETÚBAL
+RUA MOUZINHO DE ALBUQUERQUE
+TOTAL A PAGAR
+11,58 €
+"""
+
+
+def test_aguas_do_sado_commercial_bill_takes_its_supply_address_not_its_postal_one():
+    bill = read_bill_texts(AGUAS_COMERCIAL, AGUAS_COMERCIAL)
+    assert bill["amount"] == 11.58 and bill["invoice"] == "202200000003"
+    assert bill["address"] == "RUA ROBERTO IVENS 3"
+
+
+def test_aguas_do_sado_bill_with_a_printed_period_is_read():
+    bill = read_bill_texts(AGUAS_2019, AGUAS_2019)
+    assert bill["invoice"] == "201900000002" and bill["issued"] == date(2019, 5, 23)
+    assert bill["period_start"] == date(2019, 4, 18) and bill["period_end"] == date(2019, 5, 17)
+    assert bill["amount"] == 8.19
+    assert bill["address"] == "AV ALENTEJO (DO) 9-05 ESQ"
     assert bill["status"] == "ok"
 
 

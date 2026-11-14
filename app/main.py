@@ -1177,17 +1177,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         pairs = bill_pairs(session, user)
         houses: dict[str, list[Decimal]] = {name: [Decimal("0")] * 12 for name, _ in pairs}
         unassigned: dict[str, dict] = {}
+        # Per place, utility and month: the amount billed. A place is a house, or else a supply address.
+        cells: dict[tuple[str, str, str, int], Decimal] = {}
         for b in bills:
             if b.status != "ok" or b.period_end is None or b.period_end.year != year:
                 continue
             if utility and b.utility != utility:
                 continue
+            month = b.period_end.month - 1
             name = house_for(b.location, pairs)
+            place = ("house", name) if name is not None else ("location", fold(b.location))
+            cells[(place[0], place[1], b.utility, month)] = cells.get((place[0], place[1], b.utility, month), Decimal("0")) + b.amount
             if name is not None:
-                houses[name][b.period_end.month - 1] += b.amount
+                houses[name][month] += b.amount
                 continue
             row = unassigned.setdefault(fold(b.location), {"location": fold(b.location), "months": [Decimal("0")] * 12})
-            row["months"][b.period_end.month - 1] += b.amount
+            row["months"][month] += b.amount
+
+        # Every house is listed, even without bills, so its gaps show; unassigned addresses follow.
+        place_list = [("house", name) for name, _ in pairs] + [("location", r) for r in sorted(unassigned)]
+        places = []
+        for kind, name in dict.fromkeys(place_list):
+            utilities = sorted({u for (k, n, u, _m) in cells if (k, n) == (kind, name)})
+            months = {u: [float(cells[(kind, name, u, m)]) if (kind, name, u, m) in cells else None for m in range(12)]
+                      for u in utilities}
+            missing = {u: [m for m in range(12) if months[u][m] is None] for u in utilities}
+            places.append({"name": name, "house": kind == "house", "utilities": months, "missing": missing})
 
         def out(months: list[Decimal]) -> dict:
             return {"months": [float(m) for m in months], "total": float(sum(months, Decimal("0")))}
@@ -1195,9 +1210,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "year": year,
             "years": years,
-            "utilities": ["electricity", "gas", "water"],
+            "utilities": ["electricity", "gas", "water", "telecom"],
             "houses": [{"name": name, **out(months)} for name, months in houses.items()],
             "unassigned": [{"location": r["location"], **out(r["months"])} for r in unassigned.values()],
+            "places": places,
             "review": sum(1 for b in bills if b.status == "review"),
         }
 
