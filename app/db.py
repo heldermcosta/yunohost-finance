@@ -16,6 +16,7 @@ ADDED_COLUMNS = [
     ("transactions", "object_name", "VARCHAR(60)"),
     ("rules", "object_name", "VARCHAR(60)"),
     ("users", "ignored_terms", "TEXT NOT NULL DEFAULT ''"),
+    ("bills", "pdf_file", "VARCHAR(80)"),
 ]
 
 

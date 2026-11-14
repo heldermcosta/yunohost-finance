@@ -362,6 +362,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---- statements -------------------------------------------------------------
 
+    def keep_bill_pdf(pdf: bytes, digest: str) -> str:
+        """Keeps the bill's PDF in the pdf folder, named by its hash, and returns that name."""
+        settings.pdf_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"bill-{digest}.pdf"
+        (settings.pdf_dir / filename).write_bytes(pdf)
+        return filename
+
     def store_bills(session: Session, user: User, data: bytes, name: str) -> dict:
         """Stores a bill PDF, or every bill PDF in a ZIP. A bill already stored is not stored twice."""
         counts = {"added": 0, "already": 0, "review": 0, "skipped": 0}
@@ -386,7 +393,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 counts["skipped"] += 1
                 continue
             digest = hashlib.sha256(pdf).hexdigest()
-            if session.query(Bill).filter_by(owner_id=user.id, sha256=digest).first() is not None:
+            existing = session.query(Bill).filter_by(owner_id=user.id, sha256=digest).first()
+            if existing is not None:
+                # A bill stored before its PDF was kept gets the file now.
+                if existing.pdf_file is None:
+                    existing.pdf_file = keep_bill_pdf(pdf, digest)
                 counts["already"] += 1
                 continue
             bill = read_bill_pdf(pdf, settings.work_dir)
@@ -403,6 +414,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 location=bill["address"] or "", invoice=bill["invoice"] or "", issued=bill["issued"],
                 period_start=bill["period_start"], period_end=bill["period_end"],
                 amount=Decimal(str(bill["amount"])), status=bill["status"], source_name=filename[:255],
+                pdf_file=keep_bill_pdf(pdf, digest),
             ))
             counts["added"] += 1
             counts["review"] += bill["status"] == "review"
@@ -1223,6 +1235,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bills = session.query(Bill).filter_by(owner_id=user.id).all()
         pairs = bill_pairs(session, user)
         cells: dict[tuple, Decimal] = {}
+        items: dict[tuple, list[dict]] = {}
         order: dict[tuple[str, str], None] = {}
         for b in bills:
             if b.status != "ok" or b.period_end is None:
@@ -1232,6 +1245,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             order.setdefault(place, None)
             key = (place, b.period_end.year, b.utility, b.period_end.month - 1)
             cells[key] = cells.get(key, Decimal("0")) + b.amount
+            items.setdefault(key, []).append({"id": b.id, "provider": b.provider, "invoice": b.invoice,
+                                              "amount": float(b.amount), "has_pdf": bool(b.pdf_file)})
         utility_order = ["water", "electricity", "gas", "telecom"]
         result = []
         for place in order:
@@ -1239,8 +1254,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             years = sorted({k[1] for k in cells if k[0] == place}, reverse=True)
             result.append({
                 "name": place[1], "house": place[0] == "house", "utilities": utilities,
-                "years": [{"year": y, "months": {u: [float(cells[(place, y, u, m)]) if (place, y, u, m) in cells else None
-                                                      for m in range(12)] for u in utilities}} for y in years],
+                "years": [{"year": y,
+                           "months": {u: [float(cells[(place, y, u, m)]) if (place, y, u, m) in cells else None
+                                          for m in range(12)] for u in utilities},
+                           "items": {u: [items.get((place, y, u, m), []) for m in range(12)] for u in utilities}}
+                          for y in years],
             })
         return result
 
@@ -1270,6 +1288,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                          "period_end": b.period_end and b.period_end.isoformat(),
                          "amount": float(b.amount), "status": b.status, "source": b.source_name})
         return rows
+
+    @app.get("/api/bills/{bill_id}/pdf")
+    def bill_pdf(bill_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> Response:
+        bill = session.get(Bill, bill_id)
+        if bill is None or bill.owner_id != user.id:
+            raise _err(404, "not_found", "No such bill.")
+        path = settings.pdf_dir / bill.pdf_file if bill.pdf_file else None
+        if path is None or not path.exists():
+            raise _err(404, "no_file", "This bill's PDF was not kept. Upload the bill again to keep it.")
+        return Response(content=path.read_bytes(), media_type="application/pdf",
+                        headers={"Content-Disposition": f'inline; filename="bill-{bill.id}.pdf"'})
 
     @app.delete("/api/bills/{bill_id}")
     def delete_bill(bill_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:

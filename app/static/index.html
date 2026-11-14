@@ -129,9 +129,13 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .bill-place table.bill-grid th, .bill-place table.bill-grid td { padding: 6px 6px; text-align: right; }
 .bill-place table.bill-grid th { text-align: center; }
 .bill-cell { vertical-align: top; min-width: 80px; padding-left: 10px; padding-right: 10px; }
-.bill-line { white-space: nowrap; min-height: 1.3em; display: flex; justify-content: space-between; gap: 8px; }
-.bill-icon { text-align: left; }
-.bill-value { text-align: right; font-variant-numeric: tabular-nums; }
+.bill-line { white-space: nowrap; min-height: 1.3em; display: flex; justify-content: flex-end; }
+.bill-missing { background: var(--bad-soft); border-radius: 4px; }
+.bill-year { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.bill-icons { display: flex; flex-direction: column; text-align: right; }
+.bill-link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; font-variant-numeric: tabular-nums; }
+.bill-link:hover { text-decoration: underline; }
+.bill-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
 th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th {
   font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap;
@@ -1267,17 +1271,20 @@ async function download(path, filename) {
 }
 // Full-screen PDF viewer with a download button. Fetches the statement through the API, so access is checked.
 let pdfUrl = null, pdfName = "statement.pdf";
+function showPdfBlob(blob, name) {
+  closePdfViewer();
+  pdfUrl = URL.createObjectURL(blob);
+  pdfName = name;
+  $("pdf-title").textContent = pdfName;
+  $("pdf-frame").src = pdfUrl;
+  $("pdf-overlay").classList.add("open");
+  $("pdf-close").focus();
+}
 async function openStatementPdf(statementId, name) {
   try {
     const r = await fetch(API + `statements/${statementId}/pdf`, { credentials: "same-origin" });
     if (!r.ok) throw new Error(t("err_generic", { status: r.status }));
-    closePdfViewer();
-    pdfUrl = URL.createObjectURL(await r.blob());
-    pdfName = name || `statement-${statementId}.pdf`;
-    $("pdf-title").textContent = pdfName;
-    $("pdf-frame").src = pdfUrl;
-    $("pdf-overlay").classList.add("open");
-    $("pdf-close").focus();
+    showPdfBlob(await r.blob(), name || `statement-${statementId}.pdf`);
   } catch (e) { toast("error", errorText(e)); }
 }
 function closePdfViewer() {
@@ -1865,18 +1872,48 @@ function billDeleteButton(bill, message) {
   } } });
 }
 
-// One table per place: a row per year, a column per month. Each cell stacks the utilities the place has:
-// an icon and the amount, or nothing when that month has no bill.
+// Opens a stored bill PDF in the viewer. Bills whose file was not kept say so.
+async function openBillPdf(billId, name) {
+  try {
+    const r = await fetch(API + `bills/${billId}/pdf`, { credentials: "same-origin" });
+    if (!r.ok) { toast("warn", L("This bill's PDF was not kept. Upload the bill again to keep it.",
+                                  "Esta fatura não tem PDF guardado. Carregue-a de novo para a guardar.")); return; }
+    showPdfBlob(await r.blob(), name);
+  } catch (e) { toast("error", errorText(e)); }
+}
+
+// Several bills in one month for one utility: a small list to choose from, placed under the amount.
+function billPickMenu(anchor, items) {
+  document.querySelectorAll(".bill-menu").forEach(m => m.remove());
+  const r = anchor.getBoundingClientRect();
+  const menu = el("div", { class: "bill-menu", style: `left:${r.left}px;top:${r.bottom + 4}px` },
+    items.map(i => el("button", { class: "small", type: "button", text: `${i.provider} ${i.invoice} · ${outgoing(i.amount)}`,
+      on: { click: () => { menu.remove(); openBillPdf(i.id, `${i.provider}-${i.invoice}.pdf`); } } })));
+  document.body.append(menu);
+  setTimeout(() => document.addEventListener("click", function close(e) {
+    if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", close); }
+  }), 0);
+}
+
+// One table per place: a row per year, a column per month. The year cell carries the utility icons,
+// and each month cell lists the amounts in that same order. Clicking an amount opens its bill.
 function billGridCard(place, months) {
   const fmt = (v) => (v == null ? "\u00a0" : v.toFixed(2));
   const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), ...months.map(m => el("th", { text: m }))]);
   const body = place.years.map(y => el("tr", {}, [
-    el("th", { text: String(y.year) }),
-    ...months.map((_, m) => el("td", { class: "bill-cell" }, place.utilities.map(u =>
-      el("div", { class: "bill-line" }, [
-        el("span", { class: "bill-icon", text: BILL_ICON[u] }),
-        el("span", { class: "bill-value", text: fmt(y.months[u][m]) }),
-      ])))),
+    el("th", { class: "bill-year" }, [
+      el("span", { text: String(y.year) }),
+      el("span", { class: "bill-icons" }, place.utilities.map(u => el("span", { class: "bill-line", text: BILL_ICON[u] }))),
+    ]),
+    ...months.map((_, m) => el("td", { class: "bill-cell" }, place.utilities.map(u => {
+      const v = y.months[u][m];
+      const items = y.items[u][m];
+      if (v == null) return el("div", { class: "bill-line bill-missing", text: "\u00a0" });
+      return el("div", { class: "bill-line" }, [el("button", { class: "bill-link", type: "button", text: fmt(v), on: { click: (e) => {
+        if (items.length === 1) openBillPdf(items[0].id, `${items[0].provider}-${items[0].invoice}.pdf`);
+        else billPickMenu(e.currentTarget, items);
+      } } })]);
+    }))),
   ]));
   const title = place.house ? place.name : `${place.name} (${L("not assigned", "por atribuir")})`;
   return el("div", { class: "bill-place" }, [
