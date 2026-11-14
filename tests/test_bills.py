@@ -253,3 +253,109 @@ def test_a_non_bill_pdf_goes_the_statement_way(client, bill_texts, text_by_pdf):
     r = upload_file(client, "helder", "extrato.pdf", pdf)
     assert r.status_code == 422  # no statement parser knows this text, so it is refused as a statement
     assert client.get("/api/bills", headers=as_user("helder"), params={"year": 2018}).json() == []
+
+
+NOS = """NOS Comunicações, S.A. Sede: Rua Exemplo, 1600-404 Lisboa.
+N.º cliente     N.º contribuinte
+C844000000      230000000
+Fatura n.º      Data da fatura       Período de faturação
+FT 202293/1747833      26-09-2022     Setembro de 2022
+EXMO. SR.
+HELDER MIGUEL ALMEIDA COSTA
+AV EXEMPLO Nº 9 5º E
+2910 - 383 SETÚBAL
+Valor desta fatura com IVA                     €60,49
+Total a pagar até 19 out 2022                  €60,49
+"""
+
+NOS_WITHOUT_ADDRESS = """NOS Comunicações, S.A. Sede: Rua Exemplo, 1600-404 Lisboa.
+Fatura n.º      Data da fatura
+FT 202490/1331600      03-05-2024
+O seu período de faturação inicia ao dia 1 de cada mês.
+Nesta fatura podem estar incluídos consumos adicionais de 01-05-2024 até 31-05-2024.
+Valor desta fatura com IVA                     €49,99
+Total a pagar até 28 jun 2024                  €49,99
+"""
+
+NOWO = """NOWO Communications, S.A.
+A sua factura nowo FACTURA/RECIBO
+N° Factura Data
+R11037587 03-11-2025
+Morada de Instalação
+RUA EXEMPLO, 1C
+2910-719 SETÚBAL
+RESUMO DESTA FACTURA Valor (C/IVA) E VALOR A PAGAR
+VALOR DESTA FACTURA C/IVA € 20,00
+Detalhe da Factura Qtd Periodo de facturagao Valor (c/ IVA)
+NET120 1 de 01/11/25 a 30/11/25 € 27,50
+"""
+
+VODAFONE = """Vodafone Portugal, Comunicações Pessoais, S.A. Sede: Avenida Exemplo.
+HELDER MIGUEL ALMEIDA COSTA
+R LUIS EXEMPLO LT 19 31 6 C
+1750-159 LISBOA
+FT 001/017130125     230000000     310000000
+Data de emissão: 20 ago 2016
+Período de faturação: 16 jul a 15 ago
+Montante: € 26,89
+Total com IVA € 26,89
+"""
+
+VODAFONE_STATEMENT = """Vodafone Easy
+Extrato de Serviço jul 2016
+Helder Costa
+R EXEMPLO 112
+Período: 5 jul a 4 set
+Este documento não serve de fatura. Deve ser utilizado para efeitos exclusivamente informativos.
+Valor a pagar € 10,00
+"""
+
+
+def test_nos_bill_is_read():
+    bill = read_bill_texts(NOS, NOS)
+    assert bill["utility"] == "telecom" and bill["provider"] == "NOS"
+    assert bill["invoice"] == "FT 202293/1747833"
+    assert bill["issued"] == date(2022, 9, 26)
+    assert bill["period_end"] == date(2022, 9, 30)  # no "até" date here: the named month ends
+    assert bill["amount"] == 60.49
+    assert bill["address"] == "AV EXEMPLO"  # the house number is cut with the other columns
+    assert bill["status"] == "ok"
+
+
+def test_nos_bill_without_printed_address_is_kept_for_review():
+    bill = read_bill_texts(NOS_WITHOUT_ADDRESS, NOS_WITHOUT_ADDRESS)
+    assert bill["provider"] == "NOS" and bill["amount"] == 49.99
+    assert bill["period_end"] == date(2024, 5, 31)  # the "até" date, not the month of issue
+    assert bill["address"] is None and bill["status"] == "review"
+
+
+def test_nowo_bill_is_read_with_its_billing_period():
+    bill = read_bill_texts(NOWO, NOWO)
+    assert bill["utility"] == "telecom" and bill["provider"] == "NOWO"
+    assert bill["invoice"] == "R11037587"
+    assert bill["issued"] == date(2025, 11, 3)
+    assert bill["period_start"] == date(2025, 11, 1) and bill["period_end"] == date(2025, 11, 30)
+    assert bill["amount"] == 20.00
+    assert bill["address"] == "RUA EXEMPLO, 1C"
+    assert bill["status"] == "ok"
+
+
+def test_vodafone_bill_is_read_from_its_first_page():
+    bill = read_bill_texts(VODAFONE, VODAFONE)
+    assert bill["provider"] == "Vodafone" and bill["invoice"] == "FT 001/017130125"
+    assert bill["issued"] == date(2016, 8, 20)
+    assert bill["period_end"] == date(2016, 8, 15)
+    assert bill["amount"] == 26.89
+    assert bill["address"] == "R LUIS EXEMPLO LT 19 31 6 C"
+    assert bill["status"] == "ok"
+
+
+def test_vodafone_statement_is_not_a_bill():
+    assert read_bill_texts(VODAFONE_STATEMENT, VODAFONE_STATEMENT) is None
+
+
+def test_month_end_and_short_dates():
+    assert bills._month_end("Setembro de 2022") == date(2022, 9, 30)
+    assert bills._month_end("Fevereiro de 2024") == date(2024, 2, 29)
+    assert bills._month_end("Dezembro de 2025") == date(2025, 12, 31)
+    assert bills._short_date("01/11/25") == date(2025, 11, 1)
