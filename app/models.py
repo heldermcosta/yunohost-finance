@@ -164,6 +164,7 @@ class Bill(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))     # what the bill asks for, positive
     status: Mapped[str] = mapped_column(String(10), default="ok")  # ok | review
     source_name: Mapped[str] = mapped_column(String(255), default="")
+    pdf_file: Mapped[str | None] = mapped_column(String(80), nullable=True)  # name inside the pdf dir
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

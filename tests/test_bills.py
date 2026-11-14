@@ -190,7 +190,9 @@ def test_bill_upload_summary_and_delete(client, bill_texts):
 
     grid = client.get("/api/bills/grid", headers=as_user("helder")).json()
     lisboa = next(g for g in grid if g["name"] == "Lisboa")
-    assert lisboa["utilities"] == ["electricity"] and lisboa["years"] == [{"year": 2018, "months": {"electricity": [None, 52.42] + [None] * 10}}]
+    assert lisboa["utilities"] == ["electricity"]
+    assert lisboa["years"][0]["months"] == {"electricity": [None, 52.42] + [None] * 10}
+    assert lisboa["years"][0]["items"]["electricity"][1][0]["has_pdf"] is True
 
     bill_id = rows[0]["id"]
     assert client.delete(f"/api/bills/{bill_id}", headers=as_user("helder")).status_code == 200
