@@ -393,6 +393,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if bill is None:
                 counts["skipped"] += 1
                 continue
+            # The same invoice can come in a second copy with another file name and bytes.
+            if bill["invoice"] and session.query(Bill).filter_by(
+                    owner_id=user.id, provider=bill["provider"] or "", invoice=bill["invoice"]).first() is not None:
+                counts["already"] += 1
+                continue
             session.add(Bill(
                 owner_id=user.id, sha256=digest, utility=bill["utility"], provider=bill["provider"] or "",
                 location=bill["address"] or "", invoice=bill["invoice"] or "", issued=bill["issued"],
