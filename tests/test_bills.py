@@ -350,6 +350,30 @@ def test_vodafone_bill_is_read_from_its_first_page():
     assert bill["status"] == "ok"
 
 
+EPAL = """FATURA nº 201700000001, emitida em 2017.04.10
+Código de Cliente
+19000000
+Valor a Pagar 12.71 €
+Débito a partir de 2017.05.05
+Resumo da FATURA nº 201700000001
+Período de Faturação de 2017.03.08 a 2017.04.06
+EPAL - Abastecimento de Água
+Morada Postal (Principal) - R EXEMPLO DE MACEDO LOTE 1 6 C
+Referências para Alteração ou Cancelamento do Débito Direto SEPA
+"""
+
+
+def test_epal_water_bill_is_read_despite_its_direct_debit_text():
+    bill = read_bill_texts(EPAL, EPAL)
+    assert bill["utility"] == "water" and bill["provider"] == "EPAL"
+    assert bill["invoice"] == "201700000001"
+    assert bill["issued"] == date(2017, 4, 10)
+    assert bill["period_start"] == date(2017, 3, 8) and bill["period_end"] == date(2017, 4, 6)
+    assert bill["amount"] == 12.71
+    assert bill["address"] == "R EXEMPLO DE MACEDO LOTE 1 6 C"
+    assert bill["status"] == "ok"
+
+
 def test_vodafone_statement_is_not_a_bill():
     assert read_bill_texts(VODAFONE_STATEMENT, VODAFONE_STATEMENT) is None
 
