@@ -147,6 +147,39 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
                 bill["period_start"] = parse_date(min(a for a, _ in ranges))
                 bill["period_end"] = parse_date(max(b for _, b in ranges))
         bill["address"] = _address(_find([r"Local de fornecimento:?\s*\n?\s*" + STREET], [raw, layout]))
+    elif re.search(r"504 ?014 ?889", raw) and re.search(r"FATURA\s*n[º°]\s*\d{12}", raw, re.I) \
+            and not re.search(r"NOTA DE CR[ÉE]DITO", raw, re.I):
+        # Águas do Sado (NIPC 504 014 889), which also bills Setúbal's water and sewerage.
+        bill.update(utility="water", provider="Águas do Sado")
+        bill["invoice"] = _find([r"FATURA\s*n[º°]\s*(\d{12})"], texts)
+        bill["issued"] = _dotted(_find([r"Data de Emiss[aã]o\s*:?\s*(\d{4}\.\d{2}\.\d{2}|\d{2}-\d{2}-\d{4})"], texts))
+        m = re.search(r"(\d{2})\s?([A-Za-z]{3})(\d{4})\s+a\s+(\d{2})\s?([A-Za-z]{3})(\d{4})", layout) or \
+            re.search(r"(\d{2})\s?([A-Za-z]{3})(\d{4})\s+a\s+(\d{2})\s?([A-Za-z]{3})(\d{4})", raw)
+        if m and ABBR.get(m.group(2).lower()) and ABBR.get(m.group(5).lower()):
+            bill["period_start"] = date(int(m.group(3)), ABBR[m.group(2).lower()], int(m.group(1)))
+            bill["period_end"] = date(int(m.group(6)), ABBR[m.group(5).lower()], int(m.group(4)))
+        amount = _find([r"TOTAL A PAGAR\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*€",
+                        r"TOTAL A PAGAMENTO[^\n]*?€\s*(\d+\.\d{2})",
+                        r"Total da FATURA:\s*€\s*(\d+\.\d{2})"], texts)
+        bill["amount"] = (money(amount) if "," in amount else float(amount)) if amount else None
+        # The consumer's address is printed under the name, with its door on the next line.
+        # Commercial accounts print the supply address under "Local de consumo", after the meter details.
+        address_patterns = [
+            r"Local de consumo\s*:\s*\n+\s*HELDER MIGUEL ALMEIDA COSTA\s*\n[\s\S]{0,200}?DN \d+ ?mm[^\n]*\n[ \t]*"
+            + STREET + r"\s*\n[ \t]*([^\n]+)",
+            r"HELDER MIGUEL ALMEIDA COSTA\s*\n[ \t]*" + STREET + r"\s*\n[ \t]*([^\n]+)",
+        ]
+        bill["address"] = None
+        for pattern in address_patterns:
+            for text in texts:
+                m = re.search(pattern, text)
+                if m:
+                    door = re.sub(r"\s*SET[ÚU]BAL.*$", "", m.group(2), flags=re.I).strip(" -")
+                    door = re.sub(r"\s*-\s*", "-", door)
+                    bill["address"] = _address(f"{m.group(1)} {door}".strip())
+                    break
+            if bill["address"]:
+                break
     elif ((re.search(r"Local de Consumo|MORADA DE FORNECIMENTO", raw, re.I)
            and re.search(r"m3|m³|Água|Serviços?", raw))
           or re.search(r"cm-palmela", raw)):
