@@ -345,6 +345,7 @@ tr.cg-row td:first-child { width: 28px; }
     <button data-tab="import" data-i18n="tab_import">Import</button>
     <button data-tab="review"><span data-i18n="tab_review">Review</span> <span id="review-count" class="badge hidden"></span></button>
     <button data-tab="gallery" id="tab-btn-gallery">Gallery</button>
+    <button data-tab="bills" id="tab-btn-bills">Bills</button>
     <button data-tab="rules" data-i18n="tab_rules">Rules</button>
     <button data-tab="accounts" data-i18n="tab_accounts">Accounts</button>
     <button data-tab="settings" data-i18n="tab_settings">Settings</button>
@@ -480,7 +481,7 @@ tr.cg-row td:first-child { width: 28px; }
         <select id="up-account"></select></div>
     </div>
     <label for="up-files" data-i18n="pdf_files">PDF files</label>
-    <input type="file" id="up-files" accept="application/pdf" multiple>
+    <input type="file" id="up-files" accept="application/pdf,application/zip,.zip" multiple>
     <div class="toolbar" style="margin-top:12px">
       <button class="primary" id="up-go" data-i18n="import_button">Import</button>
       <span class="muted" id="up-summary"></span>
@@ -615,6 +616,39 @@ tr.cg-row td:first-child { width: 28px; }
       </div>
       <div class="gl-legend" id="gl-legend"></div>
       <div id="gl-years"></div>
+    </div>
+  </section>
+
+  <section id="tab-bills">
+    <div class="card">
+      <div class="row">
+        <div class="wide"><h2 id="bl-title">Bills by house</h2><p class="muted" id="bl-intro"></p></div>
+        <div class="auto"><label for="bl-year" id="bl-year-label">Year</label><select id="bl-year"></select></div>
+        <div class="auto"><label for="bl-utility" id="bl-utility-label">Utility</label><select id="bl-utility"></select></div>
+      </div>
+      <div id="bl-table"></div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <div class="wide"><h2 id="bl-list-title">Bills</h2></div>
+        <div class="auto"><label for="bl-house" id="bl-house-label">House</label><select id="bl-house"></select></div>
+      </div>
+      <div id="bl-list"></div>
+    </div>
+    <div class="card">
+      <h2 id="bl-houses-title">Houses and addresses</h2>
+      <p class="muted" id="bl-houses-note"></p>
+      <div id="bl-houses"></div>
+      <div class="row" style="margin-top:12px">
+        <div class="auto"><label for="bl-new-name" id="bl-new-name-label">House</label><input id="bl-new-name" type="text"></div>
+        <div class="wide"><label for="bl-new-keyword" id="bl-new-keyword-label">Address contains</label><input id="bl-new-keyword" type="text"></div>
+        <div class="auto"><button class="primary" id="bl-add" type="button"></button></div>
+      </div>
+    </div>
+    <div class="card hidden" id="bl-review-card">
+      <h2 id="bl-review-title">Needs review</h2>
+      <p class="muted" id="bl-review-note"></p>
+      <div id="bl-review"></div>
     </div>
   </section>
 </main>
@@ -838,6 +872,7 @@ function refreshCurrentTab() {
   const active = document.querySelector("#tabs button.active");
   if (active) { currentTab = active.dataset.tab; }
   applyLanguage();
+  setBillsLabels();
   if (LOADERS[currentTab]) LOADERS[currentTab]().catch(() => {});
 }
 document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -1252,7 +1287,7 @@ $("pdf-download").addEventListener("click", () => {
 // / searches transactions, ← and → move the overview period, ? lists the shortcuts, Esc closes a dialog.
 function shortcutsHelp() {
   const rows = [
-    ["1 – 9", L("Switch tab, in the order of the menu", "Mudar de separador, pela ordem do menu")],
+    ["1 – 9, 0", L("Switch tab, in the order of the menu (0 is the tenth)", "Mudar de separador, pela ordem do menu (0 é o décimo)")],
     ["/", L("Search transactions", "Pesquisar movimentos")],
     ["← →", L("Move the overview period back or forward by its length", "Mover o período do resumo para trás ou para a frente")],
     ["Esc", L("Close a dialog or the PDF viewer", "Fechar uma janela ou o visualizador de PDF")],
@@ -1278,8 +1313,9 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.ctrlKey || e.metaKey || e.altKey || dialogOpen) return;
   if (e.target.closest && e.target.closest("input, select, textarea, [contenteditable]")) return;
-  if (/^[1-9]$/.test(e.key)) {
-    const name = [...document.querySelectorAll("#tabs button")].map(b => b.dataset.tab)[Number(e.key) - 1];
+  if (/^[0-9]$/.test(e.key)) {
+    const index = e.key === "0" ? 9 : Number(e.key) - 1;
+    const name = [...document.querySelectorAll("#tabs button")].map(b => b.dataset.tab)[index];
     if (name) { e.preventDefault(); showTab(name); }
   } else if (e.key === "/") {
     e.preventDefault(); showTab("transactions"); $("tx-q").focus();
@@ -1690,6 +1726,13 @@ async function importFiles(files) {
           toast(res.status === "updated" ? "success" : "warn", file.name, text);
           break;
         }
+        if (res.status === "bills") {
+          const text = L(`Bills: ${res.added} stored, ${res.already} already stored, ${res.review} to review, ${res.skipped} skipped`,
+                         `Faturas: ${res.added} guardadas, ${res.already} já existiam, ${res.review} para rever, ${res.skipped} ignoradas`);
+          setLine(text, res.added ? "pos" : "muted");
+          toast(res.added ? "success" : "warn", file.name, text, 8000);
+          break;
+        }
         const text = res.status === "accepted" ? t("result_accepted", { n: res.transaction_count }) : t("result_review", { n: res.transaction_count });
         setLine(text, res.status === "accepted" ? "pos" : "warn");
         toast(res.status === "accepted" ? "success" : "warn", file.name, text);
@@ -1765,7 +1808,7 @@ window.addEventListener("drop", (e) => {
   e.preventDefault();
   dragDepth = 0; setDropHint(false);
   const all = [...e.dataTransfer.files];
-  const pdfs = all.filter(isPdf);
+  const pdfs = all.filter(f => isPdf(f) || /\.zip$/i.test(f.name));
   if (!pdfs.length) { toast("warn", L("Only PDF statements can be imported.", "Só se podem importar extratos em PDF.")); return; }
   if (pdfs.length < all.length) toast("warn", L(`${all.length - pdfs.length} file(s) were not PDFs and were skipped.`, `${all.length - pdfs.length} ficheiro(s) não eram PDF e foram ignorados.`));
   showTab("import");
@@ -1773,6 +1816,139 @@ window.addEventListener("drop", (e) => {
 });
 
 LOADERS.import = async () => { await loadAccounts(); };
+
+/* ---------- bills ---------- */
+// Utility bills (electricity, gas, water) by house, year and month. A bill counts in the month its
+// billing period ends. Bills are kept apart from bank movements, so bank totals are unchanged.
+const BILL_UTILITY = { electricity: () => L("Electricity", "Eletricidade"), gas: () => L("Gas", "Gás"), water: () => L("Water", "Água") };
+const wrapTable = (table) => el("div", { class: "table-wrap" }, [table]);
+const billMonths = () => (lang === "pt" ? ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+                                       : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+let billsYear = null, billsUtility = "", billsHouse = "";
+
+function setBillsLabels() {
+  $("tab-btn-bills").textContent = L("Bills", "Faturas");
+  $("bl-title").textContent = L("Bills by house", "Faturas por casa");
+  $("bl-intro").textContent = L("Each bill counts in the month its billing period ends. Bills are separate from bank movements.",
+                                "Cada fatura conta no mês em que termina o período de faturação. As faturas são separadas dos movimentos bancários.");
+  $("bl-year-label").textContent = L("Year", "Ano");
+  $("bl-utility-label").textContent = L("Utility", "Serviço");
+  $("bl-list-title").textContent = L("Bills", "Faturas");
+  $("bl-house-label").textContent = L("House", "Casa");
+  $("bl-houses-title").textContent = L("Houses and addresses", "Casas e moradas");
+  $("bl-houses-note").textContent = L("A bill goes to the first house whose text appears in its supply address. Addresses that match no house stay unassigned.",
+                                      "Uma fatura vai para a primeira casa cujo texto aparece na morada de fornecimento. As moradas sem casa ficam por atribuir.");
+  $("bl-new-name-label").textContent = L("House", "Casa");
+  $("bl-new-keyword-label").textContent = L("Address contains", "A morada contém");
+  $("bl-add").textContent = L("Add house", "Adicionar casa");
+  $("bl-review-title").textContent = L("Needs review", "Para rever");
+  $("bl-review-note").textContent = L("These bills have an amount but no readable supply address or period end. They are not in the totals.",
+                                      "Estas faturas têm valor, mas sem morada de fornecimento ou fim de período legível. Não entram nos totais.");
+}
+
+function billDeleteButton(bill, message) {
+  return el("button", { class: "small danger", type: "button", text: t("delete"), on: { click: async () => {
+    if (!(await confirmBox(message))) return;
+    try { await api(`bills/${bill.id}`, { method: "DELETE" }); toast("success", t("deleted")); LOADERS.bills(); }
+    catch (e) { toast("error", errorText(e)); }
+  } } });
+}
+
+function renderBillsTable(s) {
+  const months = billMonths();
+  const row = (label, values, total) => [label, ...values.map(v => outgoing(v)), outgoing(total)];
+  const houseRows = s.houses.map(h => row(el("button", { class: "small", type: "button", text: h.name, on: { click: () => {
+    billsHouse = h.name; LOADERS.bills().catch(e => toast("error", errorText(e)));
+  } } }), h.months, h.total));
+  const otherRows = s.unassigned.map(u => row(`${u.location} (${L("not assigned", "por atribuir")})`, u.months, u.total));
+  const all = [...s.houses, ...s.unassigned];
+  const sums = Array.from({ length: 12 }, (_, i) => all.reduce((acc, r) => acc + r.months[i], 0));
+  const totalRow = row(el("b", { text: L("Total", "Total") }), sums, sums.reduce((a, b) => a + b, 0));
+  $("bl-table").replaceChildren(wrapTable(simpleTable([L("House", "Casa"), ...months, L("Total", "Total")],
+                                             [...houseRows, ...otherRows, totalRow])));
+}
+
+async function loadBillsList() {
+  const params = new URLSearchParams({ year: String(billsYear) });
+  if (billsUtility) params.set("utility", billsUtility);
+  if (billsHouse) params.set("house", billsHouse);
+  const rows = await api("bills?" + params.toString());
+  $("bl-list").replaceChildren(wrapTable(simpleTable(
+    [L("Period end", "Fim do período"), L("Utility", "Serviço"), L("Provider", "Fornecedor"), L("Supply address", "Morada"),
+     L("Invoice", "Fatura"), L("Amount", "Valor"), ""],
+    rows.map(b => [b.period_end || "", BILL_UTILITY[b.utility](), b.provider, b.location, b.invoice, outgoing(b.amount),
+                   billDeleteButton(b, L(`Delete this ${b.provider} bill?`, `Apagar esta fatura da ${b.provider}?`))]))));
+}
+
+async function loadBillHouses(summary) {
+  const houses = await api("bill-houses");
+  const names = [...new Set(houses.map(h => h.name))];
+  $("bl-house").replaceChildren(el("option", { value: "", text: L("All houses", "Todas as casas") }),
+                                ...names.map(n => el("option", { value: n, text: n })));
+  $("bl-house").value = billsHouse;
+  $("bl-houses").replaceChildren(
+    houses.length
+      ? simpleTable([L("House", "Casa"), L("Address contains", "A morada contém"), ""], houses.map(h => [h.name, h.keyword,
+          el("button", { class: "small danger", type: "button", text: t("delete"), on: { click: async () => {
+            if (!(await confirmBox(L(`Remove ${h.name} for "${h.keyword}"?`, `Remover ${h.name} para "${h.keyword}"?`)))) return;
+            try { await api(`bill-houses/${h.id}`, { method: "DELETE" }); LOADERS.bills(); }
+            catch (e) { toast("error", errorText(e)); }
+          } } })]))
+      : el("p", { class: "muted", text: L("No houses yet. Add one below.", "Ainda não há casas. Adicione uma abaixo.") }),
+    summary.unassigned.length
+      ? el("div", { class: "muted", style: "margin-top:12px" }, [
+          el("p", { text: L("Addresses not assigned to a house:", "Moradas sem casa:") }),
+          ...summary.unassigned.map(u => el("p", {}, [
+            el("span", { text: u.location + " " }),
+            el("button", { class: "small", type: "button", text: L("Create a house for it", "Criar casa para esta morada"),
+              on: { click: () => { $("bl-new-keyword").value = u.location; $("bl-new-name").focus(); } } }),
+          ])),
+        ])
+      : null,
+  );
+}
+
+async function loadBillReview(count) {
+  $("bl-review-card").classList.toggle("hidden", !count);
+  if (!count) { $("bl-review").replaceChildren(); return; }
+  const rows = await api("bills?review=true");
+  $("bl-review").replaceChildren(wrapTable(simpleTable(
+    [L("Provider", "Fornecedor"), L("Utility", "Serviço"), L("Period end", "Fim do período"), L("Amount", "Valor"), L("File", "Ficheiro"), ""],
+    rows.map(b => [b.provider, BILL_UTILITY[b.utility](), b.period_end || "—", outgoing(b.amount), b.source,
+                   billDeleteButton(b, L("Delete this bill?", "Apagar esta fatura?"))]))));
+}
+
+LOADERS.bills = async () => {
+  setBillsLabels();
+  const params = new URLSearchParams();
+  if (billsYear) params.set("year", String(billsYear));
+  if (billsUtility) params.set("utility", billsUtility);
+  const s = await api("bills/summary?" + params.toString());
+  billsYear = s.year;
+  const years = s.years.includes(s.year) ? s.years : [s.year, ...s.years];
+  $("bl-year").replaceChildren(...years.map(y => el("option", { value: String(y), text: String(y) })));
+  $("bl-year").value = String(s.year);
+  $("bl-utility").replaceChildren(el("option", { value: "", text: L("All", "Todas") }),
+    ...s.utilities.map(u => el("option", { value: u, text: BILL_UTILITY[u]() })));
+  $("bl-utility").value = billsUtility;
+  renderBillsTable(s);
+  await loadBillHouses(s);
+  await Promise.all([loadBillsList(), loadBillReview(s.review)]);
+};
+
+$("bl-year").addEventListener("change", () => { billsYear = Number($("bl-year").value); LOADERS.bills().catch(e => toast("error", errorText(e))); });
+$("bl-utility").addEventListener("change", () => { billsUtility = $("bl-utility").value; LOADERS.bills().catch(e => toast("error", errorText(e))); });
+$("bl-house").addEventListener("change", () => { billsHouse = $("bl-house").value; loadBillsList().catch(e => toast("error", errorText(e))); });
+$("bl-add").addEventListener("click", async () => {
+  const name = $("bl-new-name").value.trim(), keyword = $("bl-new-keyword").value.trim();
+  if (!name || keyword.length < 2) { toast("warn", L("Enter a house name and part of its address.", "Escreva o nome da casa e parte da morada.")); return; }
+  try {
+    await api("bill-houses", { method: "POST", json: { name, keyword } });
+    $("bl-new-name").value = ""; $("bl-new-keyword").value = "";
+    toast("success", t("saved")); LOADERS.bills();
+  } catch (e) { toast("error", errorText(e)); }
+});
+setBillsLabels();
 
 /* ---------- review ---------- */
 // Accepted statements that repeat another statement's movements. Shown on the overview as a

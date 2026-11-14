@@ -18,6 +18,10 @@ once they are imported.
 - Budgets per category per month, with alerts at 80% and 100%.
 - Views: overview by month and category, transactions with filters, review queue, accounts
   and sharing, household accounts.
+- Utility bills (electricity, gas, water) in their own ledger, separate from bank movements. Upload
+  a bill PDF or a ZIP of them in the Import box. Each bill counts in the month its billing period
+  ends and goes to a house by its supply address. The Bills tab shows spending by house, month
+  and year, and lists bills that need review.
 - Exports: CSV, Excel, PDF report by year, full JSON backup.
 - Interface in English and Portuguese.
 - Not yet done: parsers for the other institutions, the full category rule set from the

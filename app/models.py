@@ -143,3 +143,39 @@ class Budget(Base):
 
 
 Index("ix_transactions_account_booked", Transaction.account_id, Transaction.booked_on)
+
+
+class Bill(Base):
+    """A utility bill (electricity, gas, water). Kept apart from bank transactions: bills are not
+    linked to payments and do not change the bank totals or categories."""
+
+    __tablename__ = "bills"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    utility: Mapped[str] = mapped_column(String(15))            # electricity | gas | water
+    provider: Mapped[str] = mapped_column(String(60), default="")
+    location: Mapped[str] = mapped_column(String(200), default="")  # supply address as printed
+    invoice: Mapped[str] = mapped_column(String(60), default="")
+    issued: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)  # the bill counts in this month
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))     # what the bill asks for, positive
+    status: Mapped[str] = mapped_column(String(10), default="ok")  # ok | review
+    source_name: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+
+class BillHouse(Base):
+    """A house and an address keyword. A bill goes to the first house whose keyword appears in its
+    supply address; other addresses stay unassigned until a keyword is added for them."""
+
+    __tablename__ = "bill_houses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(60))
+    keyword: Mapped[str] = mapped_column(String(120))
