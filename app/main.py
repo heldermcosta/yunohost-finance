@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import re
+import zipfile
 from calendar import monthrange
 from collections import Counter, defaultdict
 from dataclasses import asdict
@@ -20,6 +23,7 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import access, crypto, exports
+from .bills import fold, house_for, read_bill_pdf
 from .duplicates import StatementMovements, find_duplicate_statements, movement_signature, repeated_amounts
 from .version import __version__
 from .auth import username_from_authorization
@@ -28,13 +32,15 @@ from .config import Settings
 from .db import setup_schema
 from .ingest import (AccountNeeded, DuplicateStatement, PasswordRequired, SamePeriodStatement, WrongAccount,
                      WrongInstitution, import_pdf, read_pdf)
-from .models import (Account, AccountShare, Budget, Category, PdfPassword, PortfolioSnapshot, Rule, Statement,
-                     Transaction, User)
+from .models import (Account, AccountShare, Bill, BillHouse, Budget, Category, PdfPassword, PortfolioSnapshot, Rule,
+                     Statement, Transaction, User)
 from .parsers import NoParserError
 from .reimport import ReimportRefused, reimport_from_pdf
 from .transfers import detect_transfers, link, unlink
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 200 * 1024 * 1024  # upload and unpacked size limit for a ZIP of bills
+MAX_BILL_FILES = 1000
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 PDF_PASSWORD_AAD = b"pdf-password"
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -106,6 +112,11 @@ class BulkByTextIn(BaseModel):
 
 class CategoryIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+
+
+class BillHouseIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    keyword: str = Field(min_length=2, max_length=120)
 
 
 class BudgetIn(BaseModel):
@@ -351,6 +362,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---- statements -------------------------------------------------------------
 
+    def store_bills(session: Session, user: User, data: bytes, name: str) -> dict:
+        """Stores a bill PDF, or every bill PDF in a ZIP. A bill already stored is not stored twice."""
+        counts = {"added": 0, "already": 0, "review": 0, "skipped": 0}
+        pdfs: list[tuple[str, bytes]] = []
+        if data.startswith(b"PK"):
+            try:
+                archive = zipfile.ZipFile(io.BytesIO(data))
+            except zipfile.BadZipFile:
+                raise _err(422, "not_pdf", "This is not a PDF or ZIP file.")
+            members = [m for m in archive.infolist()
+                       if not m.is_dir() and m.filename.lower().endswith(".pdf") and not m.filename.startswith("__MACOSX")]
+            if len(members) > MAX_BILL_FILES:
+                raise _err(413, "too_many", f"A ZIP can hold at most {MAX_BILL_FILES} PDF files.")
+            if sum(m.file_size for m in members) > MAX_ARCHIVE_BYTES:
+                raise _err(413, "too_large", "The unpacked ZIP is larger than 200 MB.")
+            counts["skipped"] += len(archive.infolist()) - len(members)
+            pdfs = [(Path(m.filename).name, archive.read(m)) for m in members]
+        else:
+            pdfs = [(name, data)]
+        for filename, pdf in pdfs:
+            if not pdf.startswith(b"%PDF"):
+                counts["skipped"] += 1
+                continue
+            digest = hashlib.sha256(pdf).hexdigest()
+            if session.query(Bill).filter_by(owner_id=user.id, sha256=digest).first() is not None:
+                counts["already"] += 1
+                continue
+            bill = read_bill_pdf(pdf, settings.work_dir)
+            if bill is None:
+                counts["skipped"] += 1
+                continue
+            session.add(Bill(
+                owner_id=user.id, sha256=digest, utility=bill["utility"], provider=bill["provider"] or "",
+                location=bill["address"] or "", invoice=bill["invoice"] or "", issued=bill["issued"],
+                period_start=bill["period_start"], period_end=bill["period_end"],
+                amount=Decimal(str(bill["amount"])), status=bill["status"], source_name=filename[:255],
+            ))
+            counts["added"] += 1
+            counts["review"] += bill["status"] == "review"
+        session.commit()
+        return {"status": "bills", **counts, "file": name}
+
     @app.post("/api/statements", status_code=201)
     async def upload_statement(
         file: UploadFile = File(...),
@@ -363,9 +416,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if account_id is not None:
             account = account_for_owner(session, user, account_id)
 
-        data = await file.read(MAX_UPLOAD_BYTES + 1)
-        if len(data) > MAX_UPLOAD_BYTES:
+        # A ZIP of bills can be larger than one statement, so the limit is checked once the type is known.
+        data = await file.read(MAX_ARCHIVE_BYTES + 1)
+        if len(data) > MAX_ARCHIVE_BYTES or (len(data) > MAX_UPLOAD_BYTES and not data.startswith(b"PK")):
             raise _err(413, "too_large", "File is larger than 20 MB.")
+        if data.startswith(b"PK"):
+            return store_bills(session, user, data, file.filename or "bills.zip")
+        if data.startswith(b"%PDF") and read_bill_pdf(data, settings.work_dir) is not None:
+            return store_bills(session, user, data, file.filename or "bill.pdf")
         if not data.startswith(b"%PDF"):
             raise _err(422, "not_pdf", "This is not a PDF file.")
 
@@ -1096,6 +1154,104 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session.delete(budget)
         session.commit()
         return {"deleted": budget_id}
+
+    # ---- bills ------------------------------------------------------------------
+    def bill_pairs(session: Session, user: User) -> list[tuple[str, str]]:
+        return [(h.name, h.keyword) for h in session.query(BillHouse).filter_by(owner_id=user.id).order_by(BillHouse.id).all()]
+
+    def bill_years(bills: list[Bill]) -> list[int]:
+        return sorted({b.period_end.year for b in bills if b.status == "ok" and b.period_end}, reverse=True)
+
+    @app.get("/api/bills/summary")
+    def bills_summary(year: int | None = None, utility: str | None = None,
+                      user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        bills = session.query(Bill).filter_by(owner_id=user.id).all()
+        years = bill_years(bills)
+        if year is None:
+            year = years[0] if years else date.today().year
+        pairs = bill_pairs(session, user)
+        houses: dict[str, list[Decimal]] = {name: [Decimal("0")] * 12 for name, _ in pairs}
+        unassigned: dict[str, dict] = {}
+        for b in bills:
+            if b.status != "ok" or b.period_end is None or b.period_end.year != year:
+                continue
+            if utility and b.utility != utility:
+                continue
+            name = house_for(b.location, pairs)
+            if name is not None:
+                houses[name][b.period_end.month - 1] += b.amount
+                continue
+            row = unassigned.setdefault(fold(b.location), {"location": fold(b.location), "months": [Decimal("0")] * 12})
+            row["months"][b.period_end.month - 1] += b.amount
+
+        def out(months: list[Decimal]) -> dict:
+            return {"months": [float(m) for m in months], "total": float(sum(months, Decimal("0")))}
+
+        return {
+            "year": year,
+            "years": years,
+            "utilities": ["electricity", "gas", "water"],
+            "houses": [{"name": name, **out(months)} for name, months in houses.items()],
+            "unassigned": [{"location": r["location"], **out(r["months"])} for r in unassigned.values()],
+            "review": sum(1 for b in bills if b.status == "review"),
+        }
+
+    @app.get("/api/bills")
+    def list_bills(year: int | None = None, house: str | None = None, utility: str | None = None,
+                   review: bool = False, user: User = Depends(get_current_user),
+                   session: Session = Depends(get_session)) -> list[dict]:
+        bills = session.query(Bill).filter_by(owner_id=user.id).order_by(Bill.period_end.desc(), Bill.id.desc()).all()
+        pairs = bill_pairs(session, user)
+        if year is None:
+            years = bill_years(bills)
+            year = years[0] if years else date.today().year
+        rows = []
+        for b in bills:
+            if review != (b.status == "review"):
+                continue
+            if not review and (b.period_end is None or b.period_end.year != year):
+                continue
+            if utility and b.utility != utility:
+                continue
+            name = house_for(b.location, pairs)
+            if house is not None and (name or "") != house:
+                continue
+            rows.append({"id": b.id, "utility": b.utility, "provider": b.provider, "location": b.location,
+                         "house": name, "invoice": b.invoice, "issued": b.issued and b.issued.isoformat(),
+                         "period_start": b.period_start and b.period_start.isoformat(),
+                         "period_end": b.period_end and b.period_end.isoformat(),
+                         "amount": float(b.amount), "status": b.status, "source": b.source_name})
+        return rows
+
+    @app.delete("/api/bills/{bill_id}")
+    def delete_bill(bill_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        bill = session.get(Bill, bill_id)
+        if bill is None or bill.owner_id != user.id:
+            raise HTTPException(status_code=404, detail="bill not found")
+        session.delete(bill)
+        session.commit()
+        return {"deleted": bill_id}
+
+    @app.get("/api/bill-houses")
+    def list_bill_houses(user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> list[dict]:
+        return [{"id": h.id, "name": h.name, "keyword": h.keyword}
+                for h in session.query(BillHouse).filter_by(owner_id=user.id).order_by(BillHouse.id).all()]
+
+    @app.post("/api/bill-houses", status_code=201)
+    def add_bill_house(body: BillHouseIn, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        house = BillHouse(owner_id=user.id, name=body.name.strip(), keyword=fold(body.keyword))
+        session.add(house)
+        session.commit()
+        return {"id": house.id, "name": house.name, "keyword": house.keyword}
+
+    @app.delete("/api/bill-houses/{house_id}")
+    def delete_bill_house(house_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)) -> dict:
+        house = session.get(BillHouse, house_id)
+        if house is None or house.owner_id != user.id:
+            raise HTTPException(status_code=404, detail="house not found")
+        session.delete(house)
+        session.commit()
+        return {"deleted": house_id}
 
     # ---- transfers --------------------------------------------------------------
 
