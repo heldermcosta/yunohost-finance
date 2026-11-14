@@ -1,5 +1,5 @@
 """Utility bills: electricity (EDP, Ibelectra), gas (Galp), water (Águas do Sado, SMS Setúbal,
-Câmara de Palmela) and telecoms (NOS, NOWO, Vodafone). A bill is read from its own labels. Fields that cannot be read are left empty,
+Câmara de Palmela, EPAL) and telecoms (NOS, NOWO, Vodafone). A bill is read from its own labels. Fields that cannot be read are left empty,
 never guessed. A bill with an amount but no readable street address is kept for review."""
 
 from __future__ import annotations
@@ -65,6 +65,11 @@ def _short_date(s: str) -> date | None:
     return date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else None
 
 
+def _dotted(s: str | None) -> date | None:
+    """yyyy.mm.dd, as EPAL prints its dates."""
+    return parse_date(s.replace(".", "-")) if s else None
+
+
 def _month_end(name: str) -> date | None:
     """The last day of a month named as "Setembro de 2022"."""
     m = re.search(r"([a-zç]+) de (\d{4})", name.lower())
@@ -101,7 +106,9 @@ def _split_period(value: str | None) -> tuple[date | None, date | None]:
 def read_bill_texts(raw: str, layout: str) -> dict | None:
     """Reads one bill from its PDF text. Returns None for anything that is not a utility bill."""
     texts = [layout, raw]
-    if "MANDATE" in raw.upper() or "DÉBITO DIRETO SEPA" in raw.upper():
+    # EPAL invoices print "Débito Direto SEPA" in their payment section, so only mandate forms are dropped here.
+    is_epal = bool(re.search(r"FATURA n[º°]\s*\d{12}", raw, re.I) and re.search(r"EPAL|Águas Livres", raw, re.I))
+    if not is_epal and ("MANDATE" in raw.upper() or "DÉBITO DIRETO SEPA" in raw.upper()):
         return None
     bill = dict(utility=None, provider=None, address=None, invoice=None, issued=None,
                 period_start=None, period_end=None, amount=None)
@@ -213,6 +220,17 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
         amount = _find([r"Valor a pagar\s*€\s?" + NUM, r"Montante:\s*€\s?" + NUM, r"Total com IVA\s*€\s?" + NUM], texts)
         bill["amount"] = money(amount) if amount else None
         bill["address"] = _address(_find([r"HELDER MIGUEL ALMEIDA COSTA\s*\n[ \t]*" + STREET], [layout, raw]))
+    elif is_epal:
+        bill.update(utility="water", provider="EPAL")
+        bill["invoice"] = _find([r"FATURA n[º°]\s*(\d{12})"], texts)
+        bill["issued"] = _dotted(_find([r"emitida em\s*(\d{4}\.\d{2}\.\d{2})"], texts))
+        period = r"Per[ií]odo de Fa(?:ct|t)ura[çc][ãa]o[\s\S]{0,40}?(\d{4}\.\d{2}\.\d{2})\s+a\s+(\d{4}\.\d{2}\.\d{2})"
+        m = re.search(period, layout, re.I) or re.search(period, raw, re.I)
+        if m:
+            bill["period_start"], bill["period_end"] = _dotted(m.group(1)), _dotted(m.group(2))
+        amount = _find([r"Valor a Pagar\s*(\d+\.\d{2})"], texts)
+        bill["amount"] = float(amount) if amount else None
+        bill["address"] = _address(_find([r"Morada Postal \(Principal\)\s*-\s*(.+)"], texts))
     else:
         return None
 
