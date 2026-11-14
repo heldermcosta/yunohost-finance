@@ -219,6 +219,16 @@ def test_zip_of_bills_is_stored_and_non_bills_are_counted(client, bill_texts):
     assert len(client.get("/api/bills", headers=as_user("helder"), params={"year": 2018}).json()) == 2
 
 
+def test_a_second_copy_of_the_same_invoice_is_not_stored_twice(client, bill_texts):
+    first, copy = b"%PDF-1.4 copy one", b"%PDF-1.4 copy two"   # same invoice, different bytes and name
+    bill_texts[first] = (EDP, EDP)
+    bill_texts[copy] = (EDP, EDP)
+    assert upload_file(client, "helder", "0328.pdf", first).json()["added"] == 1
+    again = upload_file(client, "helder", "0329.pdf", copy).json()
+    assert again["added"] == 0 and again["already"] == 1
+    assert len(client.get("/api/bills", headers=as_user("helder"), params={"year": 2018}).json()) == 1
+
+
 def test_bills_belong_to_their_owner(client, bill_texts):
     pdf = b"%PDF-1.4 owned"
     bill_texts[pdf] = (EDP, EDP)
