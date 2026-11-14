@@ -130,11 +130,12 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .bill-place table.bill-grid th, .bill-place table.bill-grid td { padding: 6px 6px; text-align: right; }
 .bill-place table.bill-grid th { text-align: center; }
 .bill-cell { vertical-align: top; min-width: 66px; padding-left: 8px; padding-right: 8px; }
-.bill-line { white-space: nowrap; min-height: 1.3em; display: flex; justify-content: flex-end; }
+.bill-line { white-space: nowrap; height: 1.6em; line-height: 1.6em; display: flex; justify-content: flex-end; align-items: center; }
 .bill-missing { background: var(--bad-soft); border-radius: 4px; }
-.bill-year { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.bill-year { text-align: left; }
+.bill-icon-col { width: 1%; padding-left: 4px; padding-right: 4px; vertical-align: top; text-align: center; }
 .bill-icons { display: flex; flex-direction: column; text-align: right; }
-.bill-link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; font-variant-numeric: tabular-nums; }
+.bill-link { background: none; border: 0; padding: 0; margin: 0; height: 1.6em; line-height: 1.6em; color: var(--accent); font: inherit; cursor: pointer; font-variant-numeric: tabular-nums; }
 .bill-link:hover { text-decoration: underline; }
 .bill-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
 th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -1900,13 +1901,11 @@ function billPickMenu(anchor, items) {
 // and each month cell lists the amounts in that same order. Clicking an amount opens its bill.
 function billGridCard(place, months) {
   const fmt = (v) => (v == null ? "\u00a0" : v.toFixed(2));
-  const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), ...months.map(m => el("th", { text: m })),
+  const header = el("tr", {}, [el("th", { text: L("Year", "Ano") }), el("th", { text: "" }), ...months.map(m => el("th", { text: m })),
                                el("th", { text: L("Total", "Total") })]);
   const body = place.years.map(y => el("tr", {}, [
-    el("th", { class: "bill-year" }, [
-      el("span", { text: String(y.year) }),
-      el("span", { class: "bill-icons" }, place.utilities.map(u => el("span", { class: "bill-line", text: BILL_ICON[u] }))),
-    ]),
+    el("th", { class: "bill-year", text: String(y.year) }),
+    el("td", { class: "bill-icon-col" }, place.utilities.map(u => el("div", { class: "bill-line", text: BILL_ICON[u] }))),
     ...months.map((_, m) => el("td", { class: "bill-cell" }, place.utilities.map(u => {
       const v = y.months[u][m];
       const items = y.items[u][m];
