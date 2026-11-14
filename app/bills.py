@@ -1,5 +1,5 @@
-"""Utility bills: electricity (EDP, Ibelectra), gas (Galp) and water (Águas do Sado, SMS Setúbal,
-Câmara de Palmela). A bill is read from its own labels. Fields that cannot be read are left empty,
+"""Utility bills: electricity (EDP, Ibelectra), gas (Galp), water (Águas do Sado, SMS Setúbal,
+Câmara de Palmela) and telecoms (NOS, NOWO, Vodafone). A bill is read from its own labels. Fields that cannot be read are left empty,
 never guessed. A bill with an amount but no readable street address is kept for review."""
 
 from __future__ import annotations
@@ -57,6 +57,22 @@ def parse_date(s: str | None) -> date | None:
     if m:
         return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     return None
+
+
+def _short_date(s: str) -> date | None:
+    """dd/mm/yy, as NOWO prints its billing periods."""
+    m = re.match(r"(\d{2})/(\d{2})/(\d{2})$", s.strip())
+    return date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1))) if m else None
+
+
+def _month_end(name: str) -> date | None:
+    """The last day of a month named as "Setembro de 2022"."""
+    m = re.search(r"([a-zç]+) de (\d{4})", name.lower())
+    if not m or m.group(1) not in PT_MONTHS:
+        return None
+    year, month = int(m.group(2)), PT_MONTHS[m.group(1)]
+    nxt = date(year + (month == 12), month % 12 + 1, 1)
+    return date.fromordinal(nxt.toordinal() - 1)
 
 
 def _find(patterns: list[str], texts: list[str]) -> str | None:
@@ -149,6 +165,54 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
                         r"Total a Pagar\s*" + NUM, r"Total \(€\):\s*\n?\s*" + NUM,
                         r"Valor a pagar[\s\S]{0,60}?" + NUM], texts)
         bill["amount"] = money(amount) if amount else None
+    elif re.search(r"NOS Comunica", raw) and re.search(r"Fatura n\.[º°]|Data da fatura", raw) \
+            and not re.search(r"não serve de fatura", raw, re.I):
+        bill.update(utility="telecom", provider="NOS")
+        bill["invoice"] = _find([r"(FT\s?\d{6}/\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"Data da fatura[\s\S]{0,120}?(\d{2}-\d{2}-\d{4})"], texts))
+        period_name = _find([r"Per[ií]odo de fatura[çc][ãa]o[\s\S]{0,60}?([A-Za-zçãéí]+ de \d{4})"], texts)
+        until = _find([r"at[ée]\s+(\d{2}-\d{2}-\d{4})"], texts)
+        if until:
+            bill["period_end"] = parse_date(until)
+        elif period_name:
+            bill["period_end"] = _month_end(period_name)
+        amount = _find([r"Valor desta fatura com IVA\s*€\s?" + NUM, r"Total a pagar[^\n]*€\s?" + NUM], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["address"] = _address(_find([r"HELDER MIGUEL ALMEIDA COSTA\s*\n[ \t]*" + STREET], [layout, raw]))
+    elif re.search(r"nowo", raw, re.I) and re.search(r"FACTURA/RECIBO|Fatura Eletr", raw, re.I):
+        bill.update(utility="telecom", provider="NOWO")
+        bill["invoice"] = _find([r"\b([A-Z]\d{8})\b"], texts)
+        bill["issued"] = parse_date(_find([r"[A-Z]\d{8}\s+(\d{2}-\d{2}-\d{4})"], texts))
+        m = re.search(r"de (\d{2}/\d{2}/\d{2}) a (\d{2}/\d{2}/\d{2})", layout) or \
+            re.search(r"de (\d{2}/\d{2}/\d{2}) a (\d{2}/\d{2}/\d{2})", raw)
+        if m:
+            bill["period_start"], bill["period_end"] = _short_date(m.group(1)), _short_date(m.group(2))
+        amount = _find([r"VALOR DESTA FACTURA C/IVA\s*€\s?" + NUM, r"A PAGAR\s*€\s?" + NUM], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["address"] = _address(_find([r"Morada de Instala[çc][ãa]o\s*\n?\s*" + STREET], [raw, layout]))
+    elif re.search(r"Vodafone Portugal|vodafone\.pt", raw) \
+            and re.search(r"Valor a pagar|Montante:|Total com IVA", raw) \
+            and not re.search(r"não serve de fatura|Extrato de Servi", raw, re.I):
+        bill.update(utility="telecom", provider="Vodafone")
+        bill["invoice"] = _find([r"Factura/Recibo N[º°]\s*(FT\s*\d{3}/\d+|\d+)", r"(FT \d{3}/\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"Data de Emiss[ãa]o:?\s*(\d{2}[/-]\d{2}[/-]\d{4})",
+                                           r"Data de emiss[ãa]o:?\s*(\d{1,2} [a-z]{3} \d{4})"], texts))
+        m = re.search(r"Per[ií]odo de fa(?:ct|t)ura[çc][ãa]o:?\s*(\d{2}/\d{2}/\d{4}) a (\d{2}/\d{2}/\d{4})", layout) or \
+            re.search(r"Per[ií]odo de fa(?:ct|t)ura[çc][ãa]o:?\s*(\d{2}/\d{2}/\d{4}) a (\d{2}/\d{2}/\d{4})", raw)
+        if m:
+            bill["period_start"], bill["period_end"] = parse_date(m.group(1)), parse_date(m.group(2))
+        else:
+            m = re.search(r"Per[ií]odo de fa(?:ct|t)ura[çc][ãa]o:?\s*(\d{1,2}) ([a-z]{3}) a (\d{1,2}) ([a-z]{3})", layout, re.I)
+            if m and bill["issued"]:
+                end_month = ABBR.get(m.group(4).lower())
+                if end_month:
+                    end = date(bill["issued"].year, end_month, int(m.group(3)))
+                    if end > bill["issued"]:
+                        end = end.replace(year=end.year - 1)
+                    bill["period_end"] = end
+        amount = _find([r"Valor a pagar\s*€\s?" + NUM, r"Montante:\s*€\s?" + NUM, r"Total com IVA\s*€\s?" + NUM], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["address"] = _address(_find([r"HELDER MIGUEL ALMEIDA COSTA\s*\n[ \t]*" + STREET], [layout, raw]))
     else:
         return None
 
