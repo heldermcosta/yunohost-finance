@@ -409,15 +409,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     owner_id=user.id, provider=bill["provider"] or "", invoice=bill["invoice"]).first() is not None:
                 counts["already"] += 1
                 continue
-            session.add(Bill(
-                owner_id=user.id, sha256=digest, utility=bill["utility"], provider=bill["provider"] or "",
-                location=bill["address"] or "", invoice=bill["invoice"] or "", issued=bill["issued"],
-                period_start=bill["period_start"], period_end=bill["period_end"],
-                amount=Decimal(str(bill["amount"])), status=bill["status"], source_name=filename[:255],
-                pdf_file=keep_bill_pdf(pdf, digest),
-            ))
+            # A combined invoice (electricity and gas in one PDF) is stored once per service.
+            pdf_file = keep_bill_pdf(pdf, digest)
+            for part in bill.get("parts") or [bill]:
+                session.add(Bill(
+                    owner_id=user.id, sha256=digest, utility=part["utility"], provider=part["provider"] or "",
+                    location=part["address"] or "", invoice=part["invoice"] or "", issued=part["issued"],
+                    period_start=part["period_start"], period_end=part["period_end"],
+                    amount=Decimal(str(part["amount"])), status=part["status"], source_name=filename[:255],
+                    pdf_file=pdf_file,
+                ))
             counts["added"] += 1
-            counts["review"] += bill["status"] == "review"
+            counts["review"] += any(part["status"] == "review" for part in bill.get("parts") or [bill])
         session.commit()
         return {"status": "bills", **counts, "file": name}
 
