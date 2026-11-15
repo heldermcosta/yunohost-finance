@@ -151,6 +151,16 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
         bill["amount"] = money(amount) if amount else None
         bill["invoice"] = _find([r"FATURA N[º°]\s*(\d+)", r"Fatura n[º°]\s*(FT\S*\s*\S+)"], texts)
         bill["address"] = _address(_find([r"Morada de fornecimento\s*\n?\s*" + STREET], [raw, layout]))
+    elif re.search(r"EDP Comercial", raw) and re.search(r"Fatura n[º°]\s*\d+ de \d{4}-\d{2}-\d{2}", raw):
+        # The older EDP bill, with its billing period in words and its supply address in the header.
+        bill.update(utility="electricity", provider="EDP")
+        amount = _find([r"A pagar\s*€\s*" + NUM], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["invoice"] = _find([r"Fatura n[º°]\s*(\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"Fatura n[º°]\s*\d+ de (\d{4}-\d{2}-\d{2})"], texts))
+        bill["period_start"], bill["period_end"] = _split_period(
+            _find([r"Per[ií]odo de faturação\s*\n?\s*(\d{1,2} de [a-zç]+ \d{4} a \d{1,2} de [a-zç]+ \d{4})"], texts))
+        bill["address"] = _address(_find([r"energia\.edp\.pt\s+" + STREET], texts))
     elif re.search(r"IBELECTRA", raw) and re.search(r"Energia e Potência|Total Faturado", raw):
         bill.update(utility="electricity", provider="Ibelectra")
         m = re.search(r"(\d{2}-\d{2}-\d{4})\s+(\d{2}-\d{2}-\d{4})", raw)
@@ -279,6 +289,22 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
                         r"Total a Pagar\s*" + NUM, r"Total \(€\):\s*\n?\s*" + NUM,
                         r"Valor a pagar[\s\S]{0,60}?" + NUM], texts)
         bill["amount"] = money(amount) if amount else None
+    elif re.search(r"NOS A[ÇC]ORES|nos-acores", raw, re.I) and re.search(r"FATURA N[º°]\s*FA", raw):
+        # The Azores bill prints its billing periods without a year; the year is the issue year.
+        bill.update(utility="telecom", provider="NOS Açores")
+        amount = _find([r"Valor a pagar:\s*(\d+\.\d{2})"], texts)
+        bill["amount"] = float(amount) if amount else None
+        bill["invoice"] = _find([r"FATURA N[º°]\s*(FA\s*\S+)"], texts)
+        issued = _find([r"Data de Emiss[aã]o:\s*(\d{4}/\d{2}/\d{2})"], texts)
+        bill["issued"] = parse_date(issued.replace("/", "-")) if issued else None
+        period = re.search(r"\((\d{2})/(\d{2}) a (\d{2})/(\d{2})\)", layout)
+        if period and bill["issued"]:
+            start = date(bill["issued"].year, int(period.group(2)), int(period.group(1)))
+            end = date(bill["issued"].year, int(period.group(4)), int(period.group(3)))
+            if end < start:
+                end = date(end.year + 1, end.month, end.day)
+            bill["period_start"], bill["period_end"] = start, end
+        bill["address"] = None  # the bill prints no street, so it is kept for review
     elif re.search(r"NOS Comunica", raw) and re.search(r"Fatura n\.[º°]|Data da fatura", raw) \
             and not re.search(r"não serve de fatura", raw, re.I):
         bill.update(utility="telecom", provider="NOS")
