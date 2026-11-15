@@ -600,3 +600,40 @@ def test_galp_combined_invoice_is_split_into_both_services_for_review():
     assert round(electricity["amount"] + gas["amount"], 2) == 39.00
     assert electricity["status"] == gas["status"] == "review"
     assert electricity["invoice"] == gas["invoice"] == "FT 0001/100000001"
+
+
+EDP_2016 = """EDP Comercial - Comercialização de Energia, S.A.
+Casa Click MAI16 A pagar € 30,42
+www.energia.edp.pt RUA EXEMPLO , 14 4E
+Período de faturação
+29 de abr 2016 a 28 de mai 2016 (30 dias)
+e:nergi Fatura nº 10000000001 de 2016-05-28
+"""
+
+
+def test_older_edp_bill_is_read_with_its_period_in_words_and_header_address():
+    bill = read_bill_texts(EDP_2016, EDP_2016)
+    assert bill["utility"] == "electricity" and bill["provider"] == "EDP"
+    assert bill["invoice"] == "10000000001"
+    assert bill["issued"] == date(2016, 5, 28)
+    assert bill["period_start"] == date(2016, 4, 29) and bill["period_end"] == date(2016, 5, 28)
+    assert bill["amount"] == 30.42
+    assert bill["address"] == "RUA EXEMPLO , 14 4E"
+    assert bill["status"] == "ok"
+
+
+NOS_ACORES = """NOS AÇORES COMUNICAÇÕES, S.A. nos-acores.pt
+FATURA Nº FA FA001/4500000 DE 9760-000 PRAIA DA VITÓRIA
+Data de Emissão: 2023/10/31 Débito a partir de: 2023/11/29 Valor a pagar: 50.92 €
+NOS4u 500Mb (19/10 a 18/11) 50.92 € 16
+"""
+
+
+def test_nos_acores_bill_takes_its_year_from_the_issue_date_and_waits_for_review():
+    bill = read_bill_texts(NOS_ACORES, NOS_ACORES)
+    assert bill["utility"] == "telecom" and bill["provider"] == "NOS Açores"
+    assert bill["invoice"] == "FA FA001/4500000"
+    assert bill["issued"] == date(2023, 10, 31)
+    assert bill["period_start"] == date(2023, 10, 19) and bill["period_end"] == date(2023, 11, 18)
+    assert bill["amount"] == 50.92
+    assert bill["address"] is None and bill["status"] == "review"

@@ -137,6 +137,7 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .bill-icons { display: flex; flex-direction: column; text-align: right; }
 .bill-link { background: none; border: 0; padding: 0; margin: 0; height: 1.6em; line-height: 1.6em; color: var(--accent); font: inherit; cursor: pointer; font-variant-numeric: tabular-nums; }
 .bill-link:hover { text-decoration: underline; }
+.bill-joined { display: flex; justify-content: flex-end; align-items: center; border: 1px solid var(--accent); border-radius: 4px; margin: 1px 0; padding: 0 4px; box-sizing: border-box; }
 .bill-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
 th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th {
@@ -1897,6 +1898,40 @@ function billPickMenu(anchor, items) {
   }), 0);
 }
 
+// The lines of one month cell, in the same order as the icon column. Neighbouring utilities that come
+// from one bill (a combined invoice, stored once per service with the same invoice number) are joined
+// into one block: its amounts are added up and it opens that bill's PDF.
+function billCellLines(place, y, m, fmt) {
+  const lines = [];
+  const utilities = place.utilities;
+  const sameBill = (a, b) => a.length === 1 && b.length === 1 && a[0].invoice && a[0].provider === b[0].provider && a[0].invoice === b[0].invoice;
+  let i = 0;
+  while (i < utilities.length) {
+    const u = utilities[i];
+    const v = y.months[u][m];
+    const items = y.items[u][m];
+    if (v == null) { lines.push(el("div", { class: "bill-line bill-missing", text: " " })); i++; continue; }
+    let j = i + 1;
+    while (j < utilities.length && y.months[utilities[j]][m] != null && sameBill(items, y.items[utilities[j]][m])) j++;
+    const count = j - i;
+    const open = (e) => {
+      if (items.length === 1) openBillPdf(items[0].id, `${items[0].provider}-${items[0].invoice}.pdf`);
+      else billPickMenu(e.currentTarget, items);
+    };
+    if (count === 1) {
+      lines.push(el("div", { class: "bill-line" }, [el("button", { class: "bill-link", type: "button", text: fmt(v), on: { click: open } })]));
+    } else {
+      const total = utilities.slice(i, j).reduce((sum, w) => sum + y.months[w][m], 0);
+      lines.push(el("div", { class: "bill-joined", style: `height: ${count * 1.6}em`,
+                             title: utilities.slice(i, j).map(w => BILL_UTILITY[w]()).join(" + ") }, [
+        el("button", { class: "bill-link", type: "button", text: fmt(total), on: { click: open } }),
+      ]));
+    }
+    i = j;
+  }
+  return lines;
+}
+
 // One table per place: a row per year, a column per month. The year cell carries the utility icons,
 // and each month cell lists the amounts in that same order. Clicking an amount opens its bill.
 function billGridCard(place, months) {
@@ -1906,15 +1941,7 @@ function billGridCard(place, months) {
   const body = place.years.map(y => el("tr", {}, [
     el("th", { class: "bill-year", text: String(y.year) }),
     el("td", { class: "bill-icon-col" }, place.utilities.map(u => el("div", { class: "bill-line", text: BILL_ICON[u] }))),
-    ...months.map((_, m) => el("td", { class: "bill-cell" }, place.utilities.map(u => {
-      const v = y.months[u][m];
-      const items = y.items[u][m];
-      if (v == null) return el("div", { class: "bill-line bill-missing", text: "\u00a0" });
-      return el("div", { class: "bill-line" }, [el("button", { class: "bill-link", type: "button", text: fmt(v), on: { click: (e) => {
-        if (items.length === 1) openBillPdf(items[0].id, `${items[0].provider}-${items[0].invoice}.pdf`);
-        else billPickMenu(e.currentTarget, items);
-      } } })]);
-    }))),
+    ...months.map((_, m) => el("td", { class: "bill-cell" }, billCellLines(place, y, m, fmt))),
     el("td", { class: "bill-total", text: fmt(Object.values(y.months).flat().reduce((a, v) => a + (v || 0), 0)) }),
   ]));
   const title = place.house ? place.name : `${place.name} (${L("not assigned", "por atribuir")})`;
