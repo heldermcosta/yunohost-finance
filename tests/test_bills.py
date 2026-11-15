@@ -469,3 +469,134 @@ def test_month_end_and_short_dates():
     assert bills._month_end("Fevereiro de 2024") == date(2024, 2, 29)
     assert bills._month_end("Dezembro de 2025") == date(2025, 12, 31)
     assert bills._short_date("01/11/25") == date(2025, 11, 1)
+
+
+LUZBOA = """LUZBOA - Comercialização de Energia Lda
+Fatura
+FA LB24/12 345 A pagar
+Data de Emissão
+21-09-2024 17,37€
+Período de faturação
+19/08/2024 a 18/09/2024
+Helder Costa PT0002000000000001 Energia 9,02 €
+Morada de Fornecimento Potência
+RUA EXEMPLO DE TESTE, 1      2,30
+Potência 6,40€
+"""
+
+
+def test_luzboa_bill_is_read_with_its_period_and_supply_address():
+    bill = read_bill_texts(LUZBOA, LUZBOA)
+    assert bill["utility"] == "electricity" and bill["provider"] == "LUZBOA"
+    assert bill["invoice"] == "FA LB24/12 345"
+    assert bill["issued"] == date(2024, 9, 21)
+    assert bill["period_start"] == date(2024, 8, 19) and bill["period_end"] == date(2024, 9, 18)
+    assert bill["amount"] == 17.37
+    assert bill["address"] == "RUA EXEMPLO DE TESTE, 1"
+    assert bill["status"] == "ok"
+
+
+def test_luzboa_credit_note_is_not_a_bill():
+    text = "LUZBOA - Comercialização de Energia\nNOTA DE CRÉDITO\nA pagar 3,00€"
+    assert read_bill_texts(text, text) is None
+
+
+PLENITUDE = """Eni Plenitude Iberia, SL sucursal em Portugal DATA EMISSÃO: 10-04-2024
+TOTAL VALOR DA FATURA 45,88 €
+FATURA: FT F24PT/00000001
+FATURAÇÃO: 22-02-2024 a 07-04-2024
+MORADA DO FORNECIMENTO: RUA EXEMPLO 9, 5ºESQ    IDENT. CREDOR.: PT00000000
+"""
+
+
+def test_plenitude_bill_is_read():
+    bill = read_bill_texts(PLENITUDE, PLENITUDE)
+    assert bill["utility"] == "electricity" and bill["provider"] == "Eni Plenitude"
+    assert bill["invoice"] == "F24PT/00000001"
+    assert bill["issued"] == date(2024, 4, 10)
+    assert bill["period_start"] == date(2024, 2, 22) and bill["period_end"] == date(2024, 4, 7)
+    assert bill["amount"] == 45.88
+    assert bill["address"] == "RUA EXEMPLO 9, 5ºESQ"
+    assert bill["status"] == "ok"
+
+
+G9 = """G9, S.A. Rua Exemplo, 1 geral@g9.pt
+Data: 08-01-2025
+Número: FC FAE/0000001 Cliente: 00000
+Morada: Avenida do Alentejo, 9 5º ESQ
+Débito a partir de: 13-01-2025 Entidade: 10288 Valor a pagar: 44,68 €
+Eletricidade - energia (real) 2024-12-13 2024-12-31 63 kWh 6% 0,0804 5,07
+Eletricidade - energia (real) 2025-01-01 2025-01-07 47 kWh 6% 0,0804 3,78
+"""
+
+
+def test_g9_monthly_electricity_bill_is_read():
+    bill = read_bill_texts(G9, G9)
+    assert bill["utility"] == "electricity" and bill["provider"] == "G9"
+    assert bill["invoice"] == "FC FAE/0000001"
+    assert bill["issued"] == date(2025, 1, 8)
+    assert bill["period_start"] == date(2024, 12, 13) and bill["period_end"] == date(2025, 1, 7)
+    assert bill["amount"] == 44.68
+    assert bill["address"] == "Avenida do Alentejo, 9 5º ESQ"
+
+
+JAF = """JAFplus Operador de Rede
+Hélder Miguel Almeida Costa
+Rua Exemplo, Nº193
+2950-110 Palmela
+FATURA:
+FA JAF26/2 594 de 20/01/2026
+TOTAL A PAGAR: 16,93 € CÓD. IDENTIFICAÇÃO CREDOR: ID
+DETALHES DO DOCUMENTO Data Início Data Fim Quantidades
+Consumo em Simples 19/12/2025 31/12/2025 16,00 kWh
+Consumo em Simples 01/01/2026 18/01/2026 37,00 kWh
+"""
+
+
+def test_jafplus_bill_takes_its_period_from_the_earliest_and_latest_dates():
+    bill = read_bill_texts(JAF, JAF)
+    assert bill["utility"] == "electricity" and bill["provider"] == "JAFplus"
+    assert bill["invoice"] == "JAF26/2 594"
+    assert bill["issued"] == date(2026, 1, 20)
+    assert bill["period_start"] == date(2025, 12, 19) and bill["period_end"] == date(2026, 1, 18)
+    assert bill["amount"] == 16.93
+    assert bill["address"] == "Rua Exemplo, Nº193"
+    assert bill["status"] == "ok"
+
+
+
+GALP_COMBINED_TEMPLATE = """Galp Power, S.A. Rua Exemplo, Lisboa N.I.P.C. 504 723 456
+Fatura: FT 0001/100000001
+Data: 15 AGO 2019 Período de Faturação: 07 JUL 2019 a 11 AGO 2019
+Electricidade Gás Natural Serviços Taxas e Impostos IVA
+{columns}
+Local de fornecimento: RUA EXEMPLO 28 6 C
+VALOR TOTAL DESTA FATURA {base} € + {vat} € = {total} €
+"""
+
+
+def galp_bill(electricity: str, gas: str, taxes: str, vat: str, total: str):
+    base = f"{float(total.replace(',', '.')) - float(vat.replace(',', '.')):.2f}".replace(".", ",")
+    text = GALP_COMBINED_TEMPLATE.format(columns=f"{electricity} € + {gas} € + 0,00 € + {taxes} € + {vat} € =\n{total} €",
+                       base=base, vat=vat, total=total)
+    return read_bill_texts(text, text)
+
+
+def test_galp_electricity_only_invoice_is_electricity():
+    bill = galp_bill("38,41", "0,00", "3,12", "8,19", "49,72")
+    assert bill["utility"] == "electricity" and bill["provider"] == "Galp"
+    assert bill["amount"] == 49.72 and "parts" not in bill
+
+
+def test_galp_gas_only_invoice_is_gas():
+    bill = galp_bill("0,00", "14,20", "0,00", "2,96", "17,16")
+    assert bill["utility"] == "gas" and bill["amount"] == 17.16 and "parts" not in bill
+
+
+def test_galp_combined_invoice_is_split_into_both_services_for_review():
+    bill = galp_bill("20,00", "10,00", "3,00", "6,00", "39,00")
+    electricity, gas = bill["parts"]
+    assert (electricity["utility"], gas["utility"]) == ("electricity", "gas")
+    assert round(electricity["amount"] + gas["amount"], 2) == 39.00
+    assert electricity["status"] == gas["status"] == "review"
+    assert electricity["invoice"] == gas["invoice"] == "FT 0001/100000001"

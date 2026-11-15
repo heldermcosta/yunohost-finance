@@ -103,6 +103,36 @@ def _split_period(value: str | None) -> tuple[date | None, date | None]:
     return parse_date(start), parse_date(end)
 
 
+SERVICE_COLUMNS = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2}) €\s*\+\s*(\d{1,3}(?:\.\d{3})*,\d{2}) €\s*\+\s*"
+                             r"\d{1,3}(?:\.\d{3})*,\d{2} €\s*\+\s*\d{1,3}(?:\.\d{3})*,\d{2} €\s*\+\s*"
+                             r"\d{1,3}(?:\.\d{3})*,\d{2} €")
+
+
+def _split_galp(bill: dict, texts: list[str], raw: str) -> None:
+    """A Galp invoice shows its amounts per service in one line: electricity, gas, services, taxes, VAT.
+    Most invoices bill one service. When both are billed, the total is shared out in proportion to the
+    electricity and gas amounts; both parts are then kept for review, since the printed amounts do not
+    say how the taxes and VAT divide."""
+    cols = None
+    for text in texts:
+        m = SERVICE_COLUMNS.search(text)
+        if m:
+            cols = [money(m.group(1)), money(m.group(2))]
+            break
+    if cols is None:
+        if not re.search(r"G[áa]s natural", raw, re.I) and re.search(r"Eletricidade", raw):
+            bill["utility"] = "electricity"
+        return
+    electricity, gas = cols
+    if electricity > 0 and gas == 0:
+        bill["utility"] = "electricity"
+    elif electricity > 0 and gas > 0 and bill["amount"] is not None:
+        share = round(bill["amount"] * electricity / (electricity + gas), 2)
+        parts = [dict(bill, utility="electricity", amount=share, status="review"),
+                 dict(bill, utility="gas", amount=round(bill["amount"] - share, 2), status="review")]
+        bill.update(utility="electricity", amount=share, status="review", parts=parts)
+
+
 def read_bill_texts(raw: str, layout: str) -> dict | None:
     """Reads one bill from its PDF text. Returns None for anything that is not a utility bill."""
     texts = [layout, raw]
@@ -130,12 +160,55 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
         bill["amount"] = money(amount) if amount else None
         bill["invoice"] = _find([r"\b(FT\d{6,})\b"], texts)
         bill["address"] = _address(_find([r"Morada de\s*\n?\s*Instalação\s*\n\s*" + STREET], [raw, layout]))
+    elif (re.search(r"LUZBOA", raw) and not re.search(r"NOTA DE CR[ÉE]DITO", raw, re.I)
+          and re.search(r"Total Faturado|A pagar|Per[ií]odo de faturação", raw, re.I)):
+        bill.update(utility="electricity", provider="LUZBOA")
+        amount = _find([r"A pagar[\s\S]{0,160}?" + NUM + r"\s*€", r"Total Faturado\s*" + NUM + r"\s*€"], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["invoice"] = _find([r"(FA\s*LB\d{2}/\d+(?:\s\d+)?)"], texts)
+        bill["issued"] = parse_date(_find([r"Data de Emiss[aã]o[\s\S]{0,40}?(\d{2}-\d{2}-\d{4})"], texts))
+        bill["period_start"], bill["period_end"] = _split_period(
+            _find([r"(\d{2}/\d{2}/\d{4}\s+a\s+\d{2}/\d{2}/\d{4})"], texts))
+        bill["address"] = _address(_find([r"Morada de Fornecimento[^\n]*\n\s*" + STREET,
+                                          r"Morada de\s+" + STREET], texts))
+    elif re.search(r"Eni Plenitude", raw) and re.search(r"TOTAL VALOR DA FATURA", raw, re.I):
+        bill.update(utility="electricity", provider="Eni Plenitude")
+        amount = _find([r"TOTAL VALOR DA FATURA\s*" + NUM + r"\s*€"], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["invoice"] = _find([r"FATURA:\s*FT\s*(\S+)"], texts)
+        bill["issued"] = parse_date(_find([r"DATA EMISS[ÃA]O:\s*(\d{2}-\d{2}-\d{4})"], texts))
+        bill["period_start"], bill["period_end"] = _split_period(
+            _find([r"FATURA[ÇC][ÃA]O:\s*(\d{2}-\d{2}-\d{4}\s+a\s+\d{2}-\d{2}-\d{4})"], texts))
+        bill["address"] = _address(_find([r"MORADA DO FORNECIMENTO:\s*" + STREET], texts))
+    elif re.search(r"G9, S\.A\.|my\.g9\.pt", raw) and re.search(r"Valor a pagar:", raw, re.I):
+        bill.update(utility="electricity", provider="G9")
+        amount = _find([r"Valor a pagar:\s*" + NUM + r"\s*€"], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["invoice"] = _find([r"N[úu]mero:\s*(FC FAE/\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"Data:\s*(\d{2}-\d{2}-\d{4})"], texts))
+        periods = re.findall(r"(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})", layout)
+        if periods:
+            bill["period_start"] = parse_date(min(a for a, _ in periods))
+            bill["period_end"] = parse_date(max(b for _, b in periods))
+        bill["address"] = _address(_find([r"Morada:\s*" + STREET], texts))
+    elif re.search(r"JAFplus", raw) and re.search(r"TOTAL A PAGAR", raw):
+        bill.update(utility="electricity", provider="JAFplus")
+        amount = _find([r"TOTAL A PAGAR:\s*" + NUM + r"\s*€"], texts)
+        bill["amount"] = money(amount) if amount else None
+        bill["invoice"] = _find([r"FA (JAF\S+\s+\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"FA JAF\S+\s+\d+\s+de\s+(\d{2}/\d{2}/\d{4})"], texts))
+        periods = re.findall(r"(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})", layout)
+        if periods:
+            bill["period_start"] = min(parse_date(a) for a, _ in periods)
+            bill["period_end"] = max(parse_date(b) for _, b in periods)
+        bill["address"] = _address(_find([r"H[ée]lder Miguel Almeida Costa\s*\n[ \t]*" + STREET], texts))
     elif (re.search(r"Galp", raw, re.I)
           and re.search(r"Fatura:\s*FT|DADOS DA SUA CONTA|Nº DO DOCUMENTO", raw)
           and re.search(r"valor desta fatura|Período de Faturação|Valor a pagar", raw, re.I)):
         bill.update(utility="gas", provider="Galp")
         bill["period_start"], bill["period_end"] = _split_period(_find([r"Período de Faturação:\s*(.+)"], texts))
-        amount = _find([r"valor desta fatura é[\s\S]{0,40}?" + NUM, r"Valor a pagar\s*\n?\s*" + NUM], texts)
+        amount = _find([r"VALOR TOTAL DESTA FATURA[^=]*=\s*" + NUM, r"valor desta fatura é[\s\S]{0,40}?" + NUM,
+                        r"Valor a pagar\s*\n?\s*" + NUM], texts)
         bill["amount"] = money(amount) if amount else None
         bill["invoice"] = _find([r"Fatura:\s*(FT\s*\S+)", r"Nº DO DOCUMENTO:\s*(\S+)"], texts)
         bill["issued"] = parse_date(_find([r"Data de emiss[aã]o:?\s*(.+)", r"Data:\s*(\d{2} [A-Za-z]{3} \d{4})",
@@ -147,6 +220,7 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
                 bill["period_start"] = parse_date(min(a for a, _ in ranges))
                 bill["period_end"] = parse_date(max(b for _, b in ranges))
         bill["address"] = _address(_find([r"Local de fornecimento:?\s*\n?\s*" + STREET], [raw, layout]))
+        _split_galp(bill, texts, raw)
     elif re.search(r"504 ?014 ?889", raw) and re.search(r"FATURA\s*n[º°]\s*\d{12}", raw, re.I) \
             and not re.search(r"NOTA DE CR[ÉE]DITO", raw, re.I):
         # Águas do Sado (NIPC 504 014 889), which also bills Setúbal's water and sewerage.
