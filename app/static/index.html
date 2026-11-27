@@ -1838,10 +1838,10 @@ window.addEventListener("drop", (e) => {
 LOADERS.import = async () => { await loadAccounts(); };
 
 /* ---------- bills ---------- */
-// Utility bills (electricity, gas, water, telecoms) by house, year and month. A bill counts in the month its
+// Utility bills and condominium fees (electricity, gas, water, telecoms, condominium) by house, year and month. A bill counts in the month its
 // billing period ends. Bills are kept apart from bank movements, so bank totals are unchanged.
-const BILL_UTILITY = { electricity: () => L("Electricity", "Eletricidade"), gas: () => L("Gas", "Gás"), water: () => L("Water", "Água"), telecom: () => L("Telecoms", "Telecomunicações") };
-const BILL_ICON = { electricity: "⚡", gas: "🔥", water: "💧", telecom: "📞" };
+const BILL_UTILITY = { electricity: () => L("Electricity", "Eletricidade"), gas: () => L("Gas", "Gás"), water: () => L("Water", "Água"), telecom: () => L("Telecoms", "Telecomunicações"), condominium: () => L("Condominium", "Condomínio") };
+const BILL_ICON = { electricity: "⚡", gas: "🔥", water: "💧", telecom: "📞", condominium: "🏢" };
 const wrapTable = (table) => el("div", { class: "table-wrap" }, [table]);
 const billMonths = () => (lang === "pt" ? ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
                                        : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);

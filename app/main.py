@@ -1225,7 +1225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "year": year,
             "years": years,
-            "utilities": ["electricity", "gas", "water", "telecom"],
+            "utilities": ["electricity", "gas", "water", "telecom", "condominium"],
             "houses": [{"name": name, **out(months)} for name, months in houses.items()],
             "unassigned": [{"location": r["location"], **out(r["months"])} for r in unassigned.values()],
             "places": places,
@@ -1250,7 +1250,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cells[key] = cells.get(key, Decimal("0")) + b.amount
             items.setdefault(key, []).append({"id": b.id, "provider": b.provider, "invoice": b.invoice,
                                               "amount": float(b.amount), "has_pdf": bool(b.pdf_file)})
-        utility_order = ["water", "electricity", "gas", "telecom"]
+        utility_order = ["water", "electricity", "gas", "telecom", "condominium"]
         result = []
         for place in order:
             utilities = [u for u in utility_order if any(k[0] == place and k[2] == u for k in cells)]

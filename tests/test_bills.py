@@ -660,3 +660,35 @@ def test_digi_invoice_is_read_with_its_service_address_over_two_lines():
     assert bill["amount"] == 6.10
     assert bill["address"] == "Avenida Alentejo (Setúbal), No. 9, Piso 5, Porta ESQ"
     assert bill["status"] == "ok"
+
+
+CONDO_RECEIPT = """Recibo nº 2688
+Gestão ao cuidado de NTV, Lda
+Recebemos de V. Ex.ª o pagamento dos seguintes valores:
+Q 8953 01-09-2023 09-09-2023 Z - Loja 25 Setembro 2023 / Fundo de Reserva Setembro 2023 5,55
+Q 9088 01-10-2023 09-10-2023 Z - Loja 25 Substituição Telhado 5,55
+Total: 11,10
+"""
+
+
+def test_condominium_receipt_is_one_part_per_document_dated_by_its_month():
+    bill = read_bill_texts(CONDO_RECEIPT, CONDO_RECEIPT)
+    assert bill["utility"] == "condominium" and bill["provider"] == "NTV"
+    first, second = bill["parts"]
+    assert first["invoice"] == "Q 8953" and first["period_end"] == date(2023, 9, 30) and first["amount"] == 5.55
+    assert second["invoice"] == "Q 9088" and second["period_end"] == date(2023, 10, 31)
+    assert bill["amount"] == 11.10 and bill["status"] == "ok"
+    assert "Mouzinho" in first["address"]
+
+
+def test_condominium_receipt_whose_lines_do_not_add_up_is_kept_for_review():
+    text = CONDO_RECEIPT.replace("Total: 11,10", "Total: 12,00")
+    bill = read_bill_texts(text, text)
+    assert all(part["status"] == "review" for part in bill["parts"]) and bill["status"] == "review"
+
+
+def test_digi_invoice_for_the_mouzinho_place_takes_that_address():
+    text = DIGI.replace("Morada de serviço Avenida Alentejo (Setúbal), No. 9, Piso",
+                        "Rua Mouzinho de Albuquerque (Setúbal), Setubal,,No. 1,\nMorada de serviço Avenida Alentejo (Setúbal), No. 9, Piso")
+    bill = read_bill_texts(text, text)
+    assert "Mouzinho" in bill["address"] and bill["address"].endswith("No. 1")
