@@ -60,11 +60,11 @@ Layout notes (see the project doc for the full write-up):
 import re
 
 AMT_TOK_RE = re.compile(r'(-?\d{1,3}(?:\.\d{3})*,\d{2})(%)?')
-PERIOD_RE = re.compile(r'Movimentos de:\s*(\d{2}/\d{2}/\d{4})\s+a\s+(\d{2}/\d{2}/\d{4})')
+PERIOD_RE = re.compile(r'(?:Movimentos de:|Per[ií]odo a que se refere[\s\S]{0,400}?extrato:)\s*(\d{2}/\d{2}/\d{4})\s+a\s+(\d{2}/\d{2}/\d{4})')
 PASSO_RE = re.compile(r'PASSO A PASSO', re.IGNORECASE)
 BLOCK_START_RE = re.compile(r'Saldo em d[ií]vida\s*\(à data (?:do extrato|de fecho do extrato) anterior\)')
 BLOCK_END_RE = re.compile(r'=?\s*Saldo em d[ií]vida\s*\(à data (?:do extrato|de fecho do extrato) atual\)')
-ROW_RE = re.compile(r'^(\d{2}/\d{2}(?:/\d{2,4})?)\s+(\d{2}/\d{2}(?:/\d{2,4})?)\s+(?:(\d{2,3})\s+)?(.*)$')
+ROW_RE = re.compile(r'^(?:\d{3}\s+)?(\d{2}/\d{2}(?:/\d{2,4})?)\s+(\d{2}/\d{2}(?:/\d{2,4})?)\s+(?:(\d{2,3})\s+)?(.*)$')
 PAGE_NOISE_RE = re.compile(
     r'^(Data\s+Data|Realiza[cç][aã]o Valor|Cart[aã]o\s+Movimentos|Comiss[oõ]es|Descontos Cart[aã]o|'
     r'\* Inclui Imposto|Movimentos de:|EXTRATO DE MOVIMENTOS|CONTA DE CR[ÉE]DITO|www\.universo\.pt|'
