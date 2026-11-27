@@ -289,6 +289,18 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
                         r"Total a Pagar\s*" + NUM, r"Total \(€\):\s*\n?\s*" + NUM,
                         r"Valor a pagar[\s\S]{0,60}?" + NUM], texts)
         bill["amount"] = money(amount) if amount else None
+    elif re.search(r"DIGI Portugal", raw) and re.search(r"Periodo de fatura[çc][ãa]o", raw, re.I):
+        # DIGI prints its amounts and dates with a dot or a comma, and its service address over two lines.
+        bill.update(utility="telecom", provider="DIGI")
+        amount = _find([r"Valor desta fatura \(c/ IVA\)\s*(\d+[.,]\d{2})\s*€"], texts)
+        bill["amount"] = float(amount.replace(",", ".")) if amount else None
+        bill["invoice"] = _find([r"(FT\.FC\d+/\d+)"], texts)
+        bill["issued"] = parse_date(_find([r"Data de emiss[aã]o\s*(\d{2}/\d{2}/\d{4})"], texts))
+        bill["period_start"], bill["period_end"] = _split_period(
+            _find([r"Periodo de fatura[çc][ãa]o\s*(\d{2}/\d{2}/\d{4}\s+a\s+\d{2}/\d{2}/\d{4})"], texts))
+        street = _find([r"Morada de servi[çc]o\s+(Avenida[^\n]*?Piso)"], texts)
+        door = _find([r"(\d+,\s*Porta\s*ESQ)\s*\d{4}-\d{3}"], texts)
+        bill["address"] = f"{street} {' '.join(door.split())}" if street and door else None
     elif re.search(r"NOS A[ÇC]ORES|nos-acores", raw, re.I) and re.search(r"FATURA N[º°]\s*FA", raw):
         # The Azores bill prints its billing periods without a year; the year is the issue year.
         bill.update(utility="telecom", provider="NOS Açores")
