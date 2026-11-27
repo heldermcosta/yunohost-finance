@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 import unicodedata
+from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
@@ -133,9 +134,41 @@ def _split_galp(bill: dict, texts: list[str], raw: str) -> None:
         bill.update(utility="electricity", amount=share, status="review", parts=parts)
 
 
+CONDO_LINE = re.compile(r"^\s*Q\s*(\d+)\s+(\d{2})-(\d{2})-(\d{4})\s+\d{2}-\d{2}-\d{4}\s+Z - Loja 25\s+.+?\s+"
+                        r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*$", re.M)
+CONDO_PLACE = "Rua Mouzinho de Albuquerque 1 (Loja 25)"
+
+
+def _condominium_receipt(layout: str) -> dict | None:
+    """A receipt from the building's administrator (NTV, Lda) for the condominium fees and works of the
+    Mouzinho place. Each line is one document, dated by its own month, so each becomes its own part."""
+    parts = []
+    for m in CONDO_LINE.finditer(layout):
+        doc, day, month, year, amount = m.groups()
+        year_i, month_i = int(year), int(month)
+        parts.append(dict(utility="condominium", provider="NTV", address=CONDO_PLACE, invoice=f"Q {doc}",
+                          issued=date(year_i, month_i, int(day)), period_start=date(year_i, month_i, 1),
+                          period_end=date(year_i, month_i, monthrange(year_i, month_i)[1]),
+                          amount=money(amount), status="ok"))
+    if not parts:
+        return None
+    total = _find([r"Total:\s*(\d{1,3}(?:\.\d{3})*,\d{2})"], [layout])
+    paid = round(sum(p["amount"] for p in parts), 2)
+    if total is None or abs(money(total) - paid) > 0.005:
+        # The lines do not add up to the receipt total, so the lines are not trusted.
+        for p in parts:
+            p["status"] = "review"
+    return dict(utility="condominium", provider="NTV", address=CONDO_PLACE, invoice=None,
+                issued=parts[0]["issued"], period_start=min(p["period_start"] for p in parts),
+                period_end=max(p["period_end"] for p in parts), amount=paid,
+                status="ok" if all(p["status"] == "ok" for p in parts) else "review", parts=parts)
+
+
 def read_bill_texts(raw: str, layout: str) -> dict | None:
     """Reads one bill from its PDF text. Returns None for anything that is not a utility bill."""
     texts = [layout, raw]
+    if re.search(r"Recebemos de v[/.]?\s*ex", raw, re.I) and re.search(r"\bNTV\b", raw):
+        return _condominium_receipt(layout)
     # EPAL invoices print "Débito Direto SEPA" in their payment section, so only mandate forms are dropped here.
     is_epal = bool(re.search(r"FATURA n[º°]\s*\d{12}", raw, re.I) and re.search(r"EPAL|Águas Livres", raw, re.I))
     if not is_epal and ("MANDATE" in raw.upper() or "DÉBITO DIRETO SEPA" in raw.upper()):
@@ -300,7 +333,10 @@ def read_bill_texts(raw: str, layout: str) -> dict | None:
             _find([r"Periodo de fatura[çc][ãa]o\s*(\d{2}/\d{2}/\d{4}\s+a\s+\d{2}/\d{2}/\d{4})"], texts))
         street = _find([r"Morada de servi[çc]o\s+(Avenida[^\n]*?Piso)"], texts)
         door = _find([r"(\d+,\s*Porta\s*ESQ)\s*\d{4}-\d{3}"], texts)
-        bill["address"] = f"{street} {' '.join(door.split())}" if street and door else None
+        service = f"{street} {' '.join(door.split())}" if street and door else None
+        # Internet for the Mouzinho place is billed there, whatever the service address says.
+        mouzinho = _find([r"(Rua Mouzinho de Albuquerque[^\n]*?No\.\s*\d+)"], texts)
+        bill["address"] = mouzinho if mouzinho and re.search(r"Mouzinho", raw, re.I) else service
     elif re.search(r"NOS A[ÇC]ORES|nos-acores", raw, re.I) and re.search(r"FATURA N[º°]\s*FA", raw):
         # The Azores bill prints its billing periods without a year; the year is the issue year.
         bill.update(utility="telecom", provider="NOS Açores")
