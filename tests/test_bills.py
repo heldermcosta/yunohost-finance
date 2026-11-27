@@ -637,3 +637,26 @@ def test_nos_acores_bill_takes_its_year_from_the_issue_date_and_waits_for_review
     assert bill["period_start"] == date(2023, 10, 19) and bill["period_end"] == date(2023, 11, 18)
     assert bill["amount"] == 50.92
     assert bill["address"] is None and bill["status"] == "review"
+
+
+DIGI = """DIGI Portugal, Lda. Sede: Avenida Exemplo, 11 - 3º, 1070-157 Lisboa
+Fatura n.º Fatura FT FT.FC26/2664724
+Periodo de faturação 13/08/2026 a 08/09/2026
+Data de emissão 20/09/2026
+Morada de serviço Avenida Alentejo (Setúbal), No. 9, Piso
+ 2910-719 Setúbal
+ 5, Porta ESQ 2910-383
+Total a pagar (impostos incluídos)
+Valor desta fatura (c/ IVA) 6,10 €
+"""
+
+
+def test_digi_invoice_is_read_with_its_service_address_over_two_lines():
+    bill = read_bill_texts(DIGI, DIGI)
+    assert bill["utility"] == "telecom" and bill["provider"] == "DIGI"
+    assert bill["invoice"] == "FT.FC26/2664724"
+    assert bill["issued"] == date(2026, 9, 20)
+    assert bill["period_start"] == date(2026, 8, 13) and bill["period_end"] == date(2026, 9, 8)
+    assert bill["amount"] == 6.10
+    assert bill["address"] == "Avenida Alentejo (Setúbal), No. 9, Piso 5, Porta ESQ"
+    assert bill["status"] == "ok"
