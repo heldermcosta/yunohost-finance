@@ -132,3 +132,23 @@ def test_cetelem_2022_2023_layout_reconciles_with_outros_movimentos_heading():
     credit = round(sum(t["credit"] or 0 for t in parsed["transactions"]), 2)
     assert round(debit - credit, 2) == 667.78
 
+
+
+def test_universo_statement_with_card_prefixed_rows_and_a_split_period_line_is_read():
+    from app.parsers import find_parser
+
+    text = "\n".join([
+        "Período a que se refere as informações prestadas",
+        "                                                                                     no presente extrato: 15/10/2026 a 15/11/2026",
+        "Data de emissão do extrato anterior: 15/10/2026",
+        "Saldo em dívida (à data de fecho do extrato anterior)                -83,03€",
+        "EXTRATO MOVIMENTOS - CONTA CRÉDITO",
+        "099  15/10  16/10  Compra na Internet CONTINENTE Portugal  -100,00€",
+        "099  04/11  05/11  Compra na Internet ADOBE SYSTEMS SOFTWARE  -19,99€",
+        "= Saldo em dívida (à data de fecho do extrato atual)                -162,38€",
+    ])
+    parser = find_parser(text)
+    assert parser.institution == "universo"
+    st = parser.parse(text)
+    assert st.period_start.isoformat() == "2026-10-15" and st.period_end.isoformat() == "2026-11-15"
+    assert [t.amount for t in st.transactions] == [Decimal("-100.00"), Decimal("-19.99")]
